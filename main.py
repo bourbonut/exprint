@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import sys
 from abc import ABC, abstractmethod
+from math import ceil, sqrt
 from typing import Any, Callable, Sequence, TypeAlias
 
 import orjson
@@ -15,7 +16,7 @@ with open("./counties-10m.json", "r") as file:
 
 class Format(ABC):
     def __init__(self, formatter: Formatter):
-        self._formatter = formatter
+        self.formatter = formatter
 
     # @abstractmethod
     def width(self) -> int: ...
@@ -37,7 +38,7 @@ class FormatClass(Format):
         self, name: str, value_fmt: Callable[[Formatter], Format]
     ) -> FormatClass:
         self._names.append(name)
-        self._values.append(value_fmt(self._formatter))
+        self._values.append(value_fmt(self.formatter))
         return self
 
     def finish(self):
@@ -58,17 +59,33 @@ class FormatTuple(Format):
         pass
 
 
+def estimate_widths(
+    widths: list[int], indentation: int, max_width: int, columns: int = 10
+) -> tuple[int, list[int]]:
+    for cols in range(columns, 0, -1):
+        rows, els = divmod(len(widths), cols)
+        col_widths = [
+            max([widths[cols * i + c] for i in range(rows + int(c < els))])
+            for c in range(cols)
+        ]
+        width = sum(col_widths) + cols * 2 + indentation + 1
+        if width < max_width:
+            break
+    return cols, col_widths
+
+
 class FormatList(Format):
     def __init__(self, formatter: Formatter):
         super().__init__(formatter)
         self._values = []
         self._widths = []
+        self._cache = None
 
     def value(self, value: Any) -> FormatList:
         return self.value_with(lambda f: f.format_any(value))
 
     def value_with(self, value_fmt: Callable[[Formatter], Format]) -> FormatList:
-        value = value_fmt(self._formatter)
+        value = value_fmt(self.formatter)
         self._widths.append(value.width())
         self._values.append(value)
         return self
@@ -78,44 +95,52 @@ class FormatList(Format):
             self.value(value)
         return self
 
-    def _total_width(self):
-        return sum(self._widths) + (len(self._widths) - 1) * 2 + 2
-
     def width(self) -> int:
-        if len(self._widths) == 0:
+        if len(self._values) == 0:
             return 2
-        return min(self._total_width(), self._formatter._width)
+        m = self.formatter.max_elements()
+        if self._cache is None:
+            self._cache = estimate_widths(
+                self._widths[:m],
+                self.formatter.indent(),
+                self.formatter.width(),
+            )
+        return self._cache[0]
 
     def finish(self):
-        max_width = self._formatter.width()
-        if self._total_width() > max_width:
-            indent = self._formatter.indent()
-            values = []
-            current_width = indent
-            counter = 0
-            string = ["["]
-            for value, width in zip(self._values, self._widths):
-                if counter > self._formatter.max_elements():
-                    string.append(
-                        " " * indent
-                        + f"... {len(self._values) - counter + 1} more items"
-                    )
-                    values.clear()
-                    break
-                if current_width + width + 1 > max_width:
-                    string.append(
-                        " " * indent + ", ".join(v.finish() for v in values) + ", "
-                    )
-                    values = [value]
-                    current_width = indent + width + 2
-                else:
-                    values.append(value)
-                    current_width += width + 2
-                counter += 1
-            if len(values) > 0:
-                string.append(
-                    " " * indent + ", ".join(v.finish() for v in values) + ", "
+        if len(self._values) == 0:
+            return "[]"
+        m = self.formatter.max_elements()
+        widths = self._widths[:m]
+        inline_width = sum(widths) + len(widths) * 2 + self.formatter.indent()
+        if len(self._values) > m or inline_width > self.formatter.width():
+            indent = self.formatter.indent()
+            if self._cache is None:
+                self._cache = estimate_widths(
+                    widths,
+                    indent,
+                    self.formatter.width(),
                 )
+            n, col_widths = self._cache
+            seq = self._values[:m]
+            q, r = divmod(len(seq), n)
+
+            def format_row(subseq: list[Format]):
+                return (
+                    " " * indent
+                    + ", ".join(
+                        [f"{y.finish():>{x}}" for x, y in zip(col_widths, subseq)]
+                    )
+                    + ","
+                )
+
+            string = ["["]
+            for i in range(q):
+                string.append(format_row(seq[n * i : n * (i + 1)]))
+            if r > 0:
+                string.append(format_row(seq[n * (i + 1) : n * (i + 1) + r]))
+            if len(self._values) > m:
+                string.append(" " * indent + f"... {len(self._values) - m} more items")
             string.append("]")
             return "\n".join(string)
         return f"[ {', '.join(value.finish() for value in self._values)} ]"
@@ -226,9 +251,7 @@ class Formatter:
     def format_any(self, obj: Any) -> Format:
         objid = id(obj)
         if objid in self._context:
-            return self.format_value().value(
-                f"(recursion {type(obj).__name__} on id={objid})"
-            )
+            return self.format_value().value("[Recursion]")
         format_func = self._dispatch.get(type(obj).__repr__)
         if format_func is None:
             raise NotImplementedError("...")
@@ -273,7 +296,7 @@ class Airprint:
         max_elements: int = 100,
     ):
         self._stream: io.TextIOBase = sys.stdout if stream is None else stream
-        self._formatter = Formatter(
+        self.formatter = Formatter(
             indentation,
             depth,
             width,
@@ -281,7 +304,7 @@ class Airprint:
         ).increase_indent()
 
     def print(self, obj: Any):
-        self._stream.write(self._formatter.format_any(obj).finish())
+        self._stream.write(self.formatter.format_any(obj).finish())
         self._stream.write("\n")
 
 
@@ -293,4 +316,10 @@ class Airprint:
 
 # print(data["arcs"][0])
 a = Airprint()
-a.print([float(x + 1) for x in range(1000)])
+
+seq = [
+    index + 1.174298 if index == 10 or index == 9 or index == 8 else float(index + 1)
+    for index in range(1000)
+]
+# seq = [float(x + 1) for x in range(1000)]
+a.print(seq)
