@@ -66,6 +66,7 @@ def width_list(cols: int, col_widths: list[int], indent: int):
 def estimate_list_widths(
     widths: list[int], indentation: int, max_width: int, columns: int = 10
 ) -> tuple[int, list[int]]:
+    columns = min(len(widths), columns)
     for cols in range(columns, 0, -1):
         rows, els = divmod(len(widths), cols)
         col_widths = [
@@ -114,12 +115,15 @@ class FormatList(Format):
 
     def finish(self):
         if len(self._values) == 0:
-            return "[]"
+            return (
+                self.formatter.indent() - self.formatter.fixed_indent()
+            ) * " " + "[]"
         m = self.formatter.max_elements()
         widths = self._widths[:m]
         inline_width = sum(widths) + len(widths) * 2 + self.formatter.indent()
         if len(self._values) > m or inline_width > self.formatter.width():
             indent = self.formatter.indent()
+            fixed_indent = self.formatter.fixed_indent()
             if self._cache is None:
                 self._cache = estimate_list_widths(
                     widths,
@@ -129,6 +133,19 @@ class FormatList(Format):
             n, col_widths = self._cache
             seq = self._values[:m]
             q, r = divmod(len(seq), n)
+
+            if n == 1:
+                values = [v.finish() for v in seq]
+                if len(self._values) > m:
+                    values.append(
+                        " " * indent + f"... {len(self._values) - m} more items"
+                    )
+                return (
+                    "[\n"
+                    + (",\n" + " " * indent).join(values)
+                    + " " * (indent - fixed_indent)
+                    + "\n]"
+                )
 
             def format_row(subseq: list[Format]):
                 return (
@@ -146,7 +163,7 @@ class FormatList(Format):
                 string.append(format_row(seq[n * (i + 1) : n * (i + 1) + r]))
             if len(self._values) > m:
                 string.append(" " * indent + f"... {len(self._values) - m} more items")
-            string.append("]")
+            string.append(" " * (indent - fixed_indent) + "]")
             return "\n".join(string)
         return f"[ {', '.join(value.finish() for value in self._values)} ]"
 
@@ -322,7 +339,7 @@ class Formatter:
         width: int = 88,
         max_elements: int = 100,
     ):
-        self._indentation = indentation
+        self._fixed_indentation = indentation
         self._depth = depth + 1
         self._width = width
         self._max_elements = max_elements
@@ -355,17 +372,17 @@ class Formatter:
             f = format_func(
                 obj,
                 Formatter(
-                    self._indentation,
+                    self._fixed_indentation,
                     self._depth - 1,
                     self._width,
                     self._max_elements,
-                ).increase_indent(),
+                ).set_indent(self._indent + self._fixed_indentation),
             )
             del self._context[objid]
             return f
 
-    def increase_indent(self) -> Formatter:
-        self._indent += self._indentation
+    def set_indent(self, indent: int) -> Formatter:
+        self._indent = indent
         return self
 
     def width(self) -> int:
@@ -376,6 +393,9 @@ class Formatter:
 
     def indent(self) -> int:
         return self._indent
+
+    def fixed_indent(self) -> int:
+        return self._fixed_indentation
 
     def max_elements(self) -> int:
         return self._max_elements
@@ -396,7 +416,7 @@ class Airprint:
             depth,
             width,
             max_elements,
-        ).increase_indent()
+        )
 
     def print(self, obj: Any):
         self._stream.write(self.formatter.format_any(obj).finish())
@@ -416,7 +436,8 @@ seq = [
     index + 1.174298 if index == 10 or index == 9 or index == 8 else float(index + 1)
     for index in range(1000)
 ]
-seq = [float(x + 1) for x in range(1000)]
+# seq = [float(x + 1) for x in range(1000)]
 # map = {str(key + 1): key + 1 for key in range(1000)}
-# seq = [[float(k) for k in range(x)] for x in range(1000)]
+seq = [[float(k) for k in range(x)] for x in range(1000)]
 a.print(seq)
+# print(seq)
