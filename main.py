@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import io
+import json
 import sys
 from abc import ABC, abstractmethod
 from math import ceil, sqrt
+from time import perf_counter
 from typing import Any, Callable, Iterable, TypeAlias
 
-import orjson
+# import orjson
 
 ToString: TypeAlias = Any
 
 with open("./counties-10m.json", "r") as file:
-    data = orjson.loads(file.read())
+    data = json.loads(file.read())
 
 
 class Format(ABC):
@@ -22,7 +24,7 @@ class Format(ABC):
     def width(self) -> int: ...
 
     @abstractmethod
-    def finish(self) -> str: ...
+    def finish(self, stream: io.TextIOBase) -> str: ...
 
 
 class FormatClass(Format):
@@ -41,7 +43,7 @@ class FormatClass(Format):
         self._values.append(value_fmt(self.formatter))
         return self
 
-    def finish(self):
+    def finish(self, stream: io.TextIOBase):
         pass
 
 
@@ -55,7 +57,7 @@ class FormatTuple(Format):
         self._values.append(value)
         return self
 
-    def finish(self):
+    def finish(self, stream: io.TextIOBase):
         pass
 
 
@@ -113,11 +115,12 @@ class FormatList(Format):
         cols, col_widths = self._cache
         return width_list(cols, col_widths, self.formatter.indent())
 
-    def finish(self):
+    def finish(self, stream: io.TextIOBase):
         if len(self._values) == 0:
-            return (
-                self.formatter.indent() - self.formatter.fixed_indent()
-            ) * " " + "[]"
+            indent = self.formatter.indent() - self.formatter.fixed_indent()
+            stream.write(indent * " ")
+            stream.write("[]")
+            return
         m = self.formatter.max_elements()
         widths = self._widths[:m]
         inline_width = sum(widths) + len(widths) * 2 + self.formatter.indent()
@@ -135,37 +138,51 @@ class FormatList(Format):
             q, r = divmod(len(seq), n)
 
             if n == 1:
-                values = [v.finish() for v in seq]
+                stream.write("[\n")
+                imax = len(self._values)
+                for i, value in enumerate(seq):
+                    value.finish(stream)
+                    if i + 1 != imax:
+                        stream.write(",\n")
+                        stream.write(" " * indent)
                 if len(self._values) > m:
-                    values.append(
-                        " " * indent + f"... {len(self._values) - m} more items"
-                    )
-                return (
-                    "[\n"
-                    + (",\n" + " " * indent).join(values)
-                    + " " * (indent - fixed_indent)
-                    + "\n]"
-                )
+                    stream.write(" " * indent)
+                    stream.write(f"... {len(self._values) - m} more items")
+                stream.write(" " * (indent - fixed_indent) + "\n]")
+                return
 
             def format_row(subseq: list[Format]):
-                return (
-                    " " * indent
-                    + ", ".join(
-                        [f"{y.finish():>{x}}" for x, y in zip(col_widths, subseq)]
-                    )
-                    + ","
-                )
+                stream.write(" " * indent)
+                imax = len(subseq)
+                for i, (col_width, value) in enumerate(zip(col_widths, subseq)):
+                    width = value.width()
+                    stream.write((col_width - width) * " ")
+                    value.finish(stream)
+                    if i + 1 == imax:
+                        stream.write(",")
+                    else:
+                        stream.write(", ")
+                stream.write("\n")
 
-            string = ["["]
+            stream.write("[\n")
             for i in range(q):
-                string.append(format_row(seq[n * i : n * (i + 1)]))
+                format_row(seq[n * i : n * (i + 1)])
             if r > 0:
-                string.append(format_row(seq[n * (i + 1) : n * (i + 1) + r]))
+                format_row(seq[n * (i + 1) : n * (i + 1) + r])
             if len(self._values) > m:
-                string.append(" " * indent + f"... {len(self._values) - m} more items")
-            string.append(" " * (indent - fixed_indent) + "]")
-            return "\n".join(string)
-        return f"[ {', '.join(value.finish() for value in self._values)} ]"
+                stream.write(" " * indent)
+                stream.write(f"... {len(self._values) - m} more items\n")
+            stream.write(" " * (indent - fixed_indent))
+            stream.write("]")
+            return
+
+        stream.write("[ ")
+        imax = len(self._values)
+        for i, value in enumerate(self._values):
+            value.finish(stream)
+            if i + 1 != imax:
+                stream.write(", ")
+        stream.write(" ]")
 
 
 def estimate_dict_width(
@@ -235,7 +252,7 @@ class FormatDict(Format):
             )
         return self._cache[1]
 
-    def finish(self):
+    def finish(self, stream: io.TextIOBase):
         lkeys = len(self._keys)
         lvalues = len(self._values)
         if lkeys < lvalues:
@@ -258,18 +275,26 @@ class FormatDict(Format):
         indent = self.formatter.indent()
         m = self.formatter.max_elements()
         if multiple_lines:
-            string = ["{"]
+            stream.write("{\n")
             for key, value in zip(self._keys[:m], self._values[:m]):
-                string.append(" " * indent + f"{key.finish()}: {value.finish()},")
+                stream.write(" " * indent)
+                key.finish(stream)
+                stream.write(": ")
+                value.finish(stream)
+                stream.write(",\n")
             if len(self._values) > m:
-                string.append(" " * indent + f"... {len(self._values) - m} more items")
-            string.append("}")
-            return "\n".join(string)
-        dict_items = ", ".join(
-            f"{key.finish()}: {value.finish()}"
-            for key, value in zip(self._keys, self._values)
-        )
-        return "{ " + dict_items + " }"
+                stream.write(" " * indent + f"... {len(self._values) - m} more items\n")
+            stream.write("}")
+            return
+        stream.write("{ ")
+        imax = len(self._values)
+        for i, (key, value) in enumerate(zip(self._keys, self._values)):
+            key.finish(stream)
+            stream.write(": ")
+            value.finish(stream)
+            if i + 1 != imax:
+                stream.write(", ")
+        stream.write(" }")
 
 
 class FormatValue(Format):
@@ -286,10 +311,10 @@ class FormatValue(Format):
     def width(self):
         return self._width
 
-    def finish(self):
+    def finish(self, stream: io.TextIOBase):
         if self._value is None:
             raise ValueError("Undefined value")
-        return self._value
+        stream.write(self._value)
 
 
 def format_float(obj: float, f: Formatter) -> Format:
@@ -376,12 +401,12 @@ class Formatter:
                     self._depth - 1,
                     self._width,
                     self._max_elements,
-                ).set_indent(self._indent + self._fixed_indentation),
+                ).with_indent(self._indent + self._fixed_indentation),
             )
             del self._context[objid]
             return f
 
-    def set_indent(self, indent: int) -> Formatter:
+    def with_indent(self, indent: int) -> Formatter:
         self._indent = indent
         return self
 
@@ -401,7 +426,7 @@ class Formatter:
         return self._max_elements
 
 
-class Airprint:
+class Exprint:
     def __init__(
         self,
         stream: io.TextIOBase | None = None,
@@ -419,7 +444,7 @@ class Airprint:
         )
 
     def print(self, obj: Any):
-        self._stream.write(self.formatter.format_any(obj).finish())
+        self.formatter.format_any(obj).finish(self._stream)
         self._stream.write("\n")
 
 
@@ -430,14 +455,17 @@ class Airprint:
 # - max displayed elements
 
 # print(data["arcs"][0])
-a = Airprint()
+a = Exprint()
 
 seq = [
     index + 1.174298 if index == 10 or index == 9 or index == 8 else float(index + 1)
     for index in range(1000)
 ]
+# seq = [1, 2, 3]
 # seq = [float(x + 1) for x in range(1000)]
 # map = {str(key + 1): key + 1 for key in range(1000)}
+# map = {"a": 19274.294802, "b": 290482094.247284601}
 seq = [[float(k) for k in range(x)] for x in range(1000)]
 a.print(seq)
+# a.print(map)
 # print(seq)
