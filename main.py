@@ -4,9 +4,10 @@ import io
 import json
 import sys
 from abc import ABC, abstractmethod
+from itertools import islice
 from math import ceil, sqrt
 from time import perf_counter
-from typing import Any, Callable, Iterable, TypeAlias
+from typing import Any, Callable, Iterable, Protocol, Sized, TypeAlias
 
 # import orjson
 
@@ -14,6 +15,10 @@ ToString: TypeAlias = Any
 
 with open("./counties-10m.json", "r") as file:
     data = json.loads(file.read())
+
+
+class IterableAndSized(Iterable[Any], Sized, Protocol):
+    pass
 
 
 class Format(ABC):
@@ -65,9 +70,13 @@ def width_list(cols: int, col_widths: list[int], indent: int):
     return sum(col_widths) + (cols - 1) * 2 + indent + 1
 
 
+duration = [0]
+
+
 def estimate_list_widths(
     widths: list[int], indentation: int, max_width: int, columns: int = 10
 ) -> tuple[int, list[int]]:
+    start = perf_counter()
     columns = min(len(widths), columns)
     for cols in range(columns, 0, -1):
         rows, els = divmod(len(widths), cols)
@@ -78,6 +87,8 @@ def estimate_list_widths(
         width = width_list(cols, col_widths, indentation)
         if width < max_width:
             break
+    end = perf_counter()
+    duration[0] += end - start
     return cols, col_widths
 
 
@@ -86,29 +97,34 @@ class FormatList(Format):
         super().__init__(formatter)
         self._values = []
         self._widths = []
+        self._length = 0
         self._cache = None
 
     def value(self, value: Any) -> FormatList:
         return self.value_with(lambda f: f.format_any(value))
 
     def value_with(self, value_fmt: Callable[[Formatter], Format]) -> FormatList:
-        value = value_fmt(self.formatter)
-        self._widths.append(value.width())
-        self._values.append(value)
+        if len(self._widths) < self.formatter.max_elements():
+            value = value_fmt(self.formatter)
+            self._widths.append(value.width())
+            self._values.append(value)
+        self._length += 1
         return self
 
-    def values(self, values: Iterable[Any]) -> FormatList:
-        for value in values:
-            self.value(value)
+    def values(self, values: IterableAndSized) -> FormatList:
+        self._length += len(values)
+        offset = self.formatter.max_elements() - len(self._widths)
+        values = [self.formatter.format_any(value) for value in islice(values, offset)]
+        self._widths.extend(value.width() for value in values)
+        self._values.extend(values)
         return self
 
     def width(self) -> int:
         if len(self._values) == 0:
             return 2
-        m = self.formatter.max_elements()
         if self._cache is None:
             self._cache = estimate_list_widths(
-                self._widths[:m],
+                self._widths,
                 self.formatter.indent(),
                 self.formatter.width(),
             )
@@ -122,7 +138,7 @@ class FormatList(Format):
             stream.write("[]")
             return
         m = self.formatter.max_elements()
-        widths = self._widths[:m]
+        widths = self._widths
         inline_width = sum(widths) + len(widths) * 2 + self.formatter.indent()
         if len(self._values) > m or inline_width > self.formatter.width():
             indent = self.formatter.indent()
@@ -134,7 +150,7 @@ class FormatList(Format):
                     self.formatter.width(),
                 )
             n, col_widths = self._cache
-            seq = self._values[:m]
+            seq = self._values
             q, r = divmod(len(seq), n)
 
             if n == 1:
@@ -145,9 +161,12 @@ class FormatList(Format):
                     if i + 1 != imax:
                         stream.write(",\n")
                         stream.write(" " * indent)
-                if len(self._values) > m:
+                    else:
+                        stream.write(",")
+                if self._length > m:
+                    stream.write("\n")
                     stream.write(" " * indent)
-                    stream.write(f"... {len(self._values) - m} more items")
+                    stream.write(f"... {self._length - m} more items")
                 stream.write(" " * (indent - fixed_indent) + "\n]")
                 return
 
@@ -169,9 +188,9 @@ class FormatList(Format):
                 format_row(seq[n * i : n * (i + 1)])
             if r > 0:
                 format_row(seq[n * (i + 1) : n * (i + 1) + r])
-            if len(self._values) > m:
+            if self._length > m:
                 stream.write(" " * indent)
-                stream.write(f"... {len(self._values) - m} more items\n")
+                stream.write(f"... {self._length - m} more items\n")
             stream.write(" " * (indent - fixed_indent))
             stream.write("]")
             return
@@ -465,7 +484,7 @@ seq = [
 # seq = [float(x + 1) for x in range(1000)]
 # map = {str(key + 1): key + 1 for key in range(1000)}
 # map = {"a": 19274.294802, "b": 290482094.247284601}
-seq = [[float(k) for k in range(x)] for x in range(1000)]
+seq = [[float(k) for k in range(x)] for x in range(10000)]
 a.print(seq)
 # a.print(map)
 # print(seq)
