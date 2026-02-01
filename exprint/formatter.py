@@ -436,6 +436,13 @@ def format_dataclass(obj: Any, f: Formatter) -> Format:
     return fclass
 
 
+def format_class(obj: Any, f: Formatter) -> Format:
+    fclass = f.format_class(obj.__class__.__name__)
+    for name, value in obj.__dict__.items():
+        fclass.field(name, value)
+    return fclass
+
+
 class Formatter:
     _dispatch_objs = {
         float.__repr__: format_float,
@@ -450,6 +457,7 @@ class Formatter:
     _dispatch_repr = {
         "recursion": format_recursion,
         "dataclass": format_dataclass,
+        "class": format_class,
     }
 
     _context = {}
@@ -502,6 +510,16 @@ class Formatter:
         if format_func is None:
             if is_dataclass(obj):
                 return self._dispatch_repr["dataclass"](
+                    obj,
+                    Formatter(
+                        self._fixed_indentation,
+                        self._depth - 1,
+                        self._width,
+                        self._max_elements,
+                    ).with_indent(self._indent + self._fixed_indentation),
+                )
+            if hasattr(obj, "__dict__"):
+                return self._dispatch_repr["class"](
                     obj,
                     Formatter(
                         self._fixed_indentation,
