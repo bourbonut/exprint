@@ -3,10 +3,9 @@ from __future__ import annotations
 import io
 from abc import ABC, abstractmethod
 from itertools import islice
-from time import perf_counter
 from typing import Any, Callable, Iterable, Protocol, Sized, TypeAlias
 
-__all__ = ["Formatter"]
+__all__ = ["Formatter", "Format"]
 
 ToString: TypeAlias = Any
 
@@ -24,26 +23,6 @@ class Format(ABC):
 
     @abstractmethod
     def finish(self, stream: io.TextIOBase) -> str: ...
-
-
-class FormatClass(Format):
-    def __init__(self, formatter: Formatter):
-        super().__init__(formatter)
-        self._names = []
-        self._values = []
-
-    def field(self, name: str, value: Any) -> FormatClass:
-        return self.field_with(name, lambda f: f.format_any(value))
-
-    def field_with(
-        self, name: str, value_fmt: Callable[[Formatter], Format]
-    ) -> FormatClass:
-        self._names.append(name)
-        self._values.append(value_fmt(self.formatter))
-        return self
-
-    def finish(self, stream: io.TextIOBase):
-        pass
 
 
 class FormatTuple(Format):
@@ -64,13 +43,9 @@ def width_list(cols: int, col_widths: list[int], indent: int):
     return sum(col_widths) + (cols - 1) * 2 + indent + 1
 
 
-duration = [0]
-
-
 def estimate_list_widths(
     widths: list[int], indentation: int, max_width: int, columns: int = 10
 ) -> tuple[int, list[int]]:
-    start = perf_counter()
     columns = min(len(widths), columns)
     for cols in range(columns, 0, -1):
         rows, els = divmod(len(widths), cols)
@@ -81,8 +56,6 @@ def estimate_list_widths(
         width = width_list(cols, col_widths, indentation)
         if width < max_width:
             break
-    end = perf_counter()
-    duration[0] += end - start
     return cols, col_widths
 
 
@@ -310,6 +283,82 @@ class FormatDict(Format):
         stream.write(" }")
 
 
+class FormatClass(Format):
+    def __init__(self, class_name: str, formatter: Formatter):
+        super().__init__(formatter)
+        self._class_name = self.formatter.format_value().value(class_name)
+        self._names = []
+        self._values = []
+        self._cache = None
+
+    def field(self, name: str, value: Any) -> FormatClass:
+        return self.field_with(name, lambda f: f.format_any(value))
+
+    def field_with(
+        self, name: str, value_fmt: Callable[[Formatter], Format]
+    ) -> FormatClass:
+        self._names.append(self.formatter.format_value().value(name))
+        self._values.append(value_fmt(self.formatter))
+        return self
+
+    def width(self) -> int:
+        if self._cache is None:
+            multiple_lines, width = estimate_dict_width(
+                self._names,
+                self._values,
+                self.formatter.width(),
+                self.formatter.indent(),
+                self.formatter.max_elements(),
+            )
+            if multiple_lines:
+                self._cache = (multiple_lines, width)
+            else:
+                self._cache = (multiple_lines, width + self._class_name.width() + 1)
+        return self._cache[1]
+
+    def finish(self, stream: io.TextIOBase):
+        if self._cache is None:
+            multiple_lines, width = estimate_dict_width(
+                self._names,
+                self._values,
+                self.formatter.width(),
+                self.formatter.indent(),
+                self.formatter.max_elements(),
+            )
+            if multiple_lines:
+                self._cache = (multiple_lines, width)
+            else:
+                self._cache = (multiple_lines, width + self._class_name.width() + 1)
+        multiple_lines = self._cache[0]
+        indent = self.formatter.indent()
+        fixed_indent = self.formatter.fixed_indent()
+        m = self.formatter.max_elements()
+        if multiple_lines:
+            self._class_name.finish(stream)
+            stream.write(" {\n")
+            for key, value in zip(self._names[:m], self._values[:m]):
+                stream.write(" " * indent)
+                key.finish(stream)
+                stream.write(": ")
+                value.finish(stream)
+                stream.write(",\n")
+            if len(self._values) > m:
+                stream.write(" " * indent + f"... {len(self._values) - m} more items\n")
+            stream.write(" " * (indent - fixed_indent))
+            stream.write("}")
+            return
+        self._class_name.finish(stream)
+        stream.write(" { ")
+        imax = len(self._values)
+        for i, (key, value) in enumerate(zip(self._names, self._values)):
+            key.finish(stream)
+            stream.write(": ")
+            value.finish(stream)
+            if i + 1 != imax:
+                stream.write(", ")
+        stream.write(" }")
+
+
 class FormatValue(Format):
     def __init__(self, formatter: Formatter):
         super().__init__(formatter)
@@ -383,8 +432,8 @@ class Formatter:
     def format_list(self) -> FormatList:
         return FormatList(self)
 
-    def format_class(self) -> FormatClass:
-        return FormatClass(self)
+    def format_class(self, class_name: str) -> FormatClass:
+        return FormatClass(class_name, self)
 
     def format_tuple(self) -> FormatTuple:
         return FormatTuple(self)

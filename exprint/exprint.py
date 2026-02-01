@@ -1,10 +1,12 @@
 import io
 import sys
-from typing import Any
+from typing import Any, Callable, TypeVar
 
-from .formatter import Formatter
+from .formatter import Format, Formatter
 
-__all__ = ["exprint"]
+__all__ = ["exprint", "dispatch"]
+
+T = TypeVar("T")
 
 
 def exprint(
@@ -20,3 +22,7 @@ def exprint(
     f = Formatter(indentation, depth, width, max_elements)
     f.format_any(obj).finish(stream)
     stream.write(end)
+
+
+def dispatch(obj_type: type[T], format_func: Callable[[T, Formatter], Format]):
+    Formatter._dispatch[obj_type.__repr__] = format_func
