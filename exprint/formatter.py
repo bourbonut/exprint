@@ -127,8 +127,6 @@ class FormatList(Format):
 
     def finish(self, stream: io.TextIOBase):
         if len(self._values) == 0:
-            indent = self.formatter.indent() - self.formatter.fixed_indent()
-            stream.write(indent * " ")
             stream.write("[]")
             return
         m = self.formatter.max_elements()
@@ -150,18 +148,18 @@ class FormatList(Format):
             if n == 1:
                 stream.write("[\n")
                 imax = len(self._values)
+                stream.write(" " * indent)
                 for i, value in enumerate(seq):
                     value.finish(stream)
                     if i + 1 != imax:
                         stream.write(",\n")
                         stream.write(" " * indent)
                     else:
-                        stream.write(",")
+                        stream.write(",\n")
                 if self._length > m:
-                    stream.write("\n")
                     stream.write(" " * indent)
-                    stream.write(f"... {self._length - m} more items")
-                stream.write(" " * (indent - fixed_indent) + "\n]")
+                    stream.write(f"... {self._length - m} more items\n")
+                stream.write(" " * (indent - fixed_indent) + "]")
                 return
 
             def format_row(subseq: list[Format]):
@@ -286,6 +284,7 @@ class FormatDict(Format):
             )
         multiple_lines = self._cache[0]
         indent = self.formatter.indent()
+        fixed_indent = self.formatter.fixed_indent()
         m = self.formatter.max_elements()
         if multiple_lines:
             stream.write("{\n")
@@ -297,6 +296,7 @@ class FormatDict(Format):
                 stream.write(",\n")
             if len(self._values) > m:
                 stream.write(" " * indent + f"... {len(self._values) - m} more items\n")
+            stream.write(" " * (indent - fixed_indent))
             stream.write("}")
             return
         stream.write("{ ")
@@ -331,20 +331,14 @@ class FormatValue(Format):
 
 
 def format_float(obj: float, f: Formatter) -> Format:
-    if f.depth() == 0:
-        return f.format_value().value("[float]")
     return f.format_value().value(obj)
 
 
 def format_int(obj: int, f: Formatter) -> Format:
-    if f.depth() == 0:
-        return f.format_value().value("[int]")
     return f.format_value().value(obj)
 
 
 def format_str(obj: str, f: Formatter) -> Format:
-    if f.depth() == 0:
-        return f.format_value().value("[str]")
     return f.format_value().value(repr(obj))
 
 
@@ -373,12 +367,12 @@ class Formatter:
     def __init__(
         self,
         indentation: int = 2,
-        depth: int = 2,
+        depth: int = 4,
         width: int = 88,
         max_elements: int = 100,
     ):
         self._fixed_indentation = indentation
-        self._depth = depth + 1
+        self._depth = depth
         self._width = width
         self._max_elements = max_elements
         self._indent = 0
