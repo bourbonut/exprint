@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from abc import ABC, abstractmethod
+from dataclasses import asdict, is_dataclass
 from itertools import islice
 from typing import Any, Callable, Iterable, Protocol, Sized, TypeAlias
 
@@ -424,8 +425,19 @@ def format_dict(obj: dict, f: Formatter) -> Format:
     return f.format_dict().items(obj.items())
 
 
+def format_recursion(obj: Any, f: Formatter) -> Format:
+    return f.format_value().value("[recursion]")
+
+
+def format_dataclass(obj: Any, f: Formatter) -> Format:
+    fclass = f.format_class(obj.__class__.__name__)
+    for name, value in asdict(obj).items():
+        fclass.field(name, value)
+    return fclass
+
+
 class Formatter:
-    _dispatch = {
+    _dispatch_objs = {
         float.__repr__: format_float,
         int.__repr__: format_int,
         str.__repr__: format_str,
@@ -434,6 +446,12 @@ class Formatter:
         set.__repr__: format_set,
         dict.__repr__: format_dict,
     }
+
+    _dispatch_repr = {
+        "recursion": format_recursion,
+        "dataclass": format_dataclass,
+    }
+
     _context = {}
 
     def __init__(
@@ -470,10 +488,29 @@ class Formatter:
     def format_any(self, obj: Any) -> Format:
         objid = id(obj)
         if objid in self._context:
-            return self.format_value().value("[Recursion]")
-        format_func = self._dispatch.get(type(obj).__repr__)
+            return self._dispatch_repr["recursion"](
+                obj,
+                Formatter(
+                    self._fixed_indentation,
+                    self._depth - 1,
+                    self._width,
+                    self._max_elements,
+                ).with_indent(self._indent + self._fixed_indentation),
+            )
+
+        format_func = self._dispatch_objs.get(type(obj).__repr__)
         if format_func is None:
-            raise NotImplementedError("...")
+            if is_dataclass(obj):
+                return self._dispatch_repr["dataclass"](
+                    obj,
+                    Formatter(
+                        self._fixed_indentation,
+                        self._depth - 1,
+                        self._width,
+                        self._max_elements,
+                    ).with_indent(self._indent + self._fixed_indentation),
+                )
+            raise NotImplementedError(f"No format function found for {type(obj)}")
         else:
             self._context[objid] = 1
             f = format_func(
