@@ -38,6 +38,7 @@ exprint(seq)
 import json
 from exprint import exprint
 
+# https://github.com/topojson/us-atlas?tab=readme-ov-file#counties-10m.json
 with open("./counties-10m.json") as file:
     data = json.load(file)
 
