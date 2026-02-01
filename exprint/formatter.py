@@ -18,32 +18,18 @@ class Format(ABC):
     def __init__(self, formatter: Formatter):
         self.formatter = formatter
 
-    # @abstractmethod
+    @abstractmethod
     def width(self) -> int: ...
 
     @abstractmethod
     def finish(self, stream: io.TextIOBase) -> str: ...
 
 
-class FormatTuple(Format):
-    def __init__(self, formatter: Formatter):
-        super().__init__(formatter)
-        # TODO: think differently
-        self._values = []
-
-    def field(self, value: Any) -> FormatTuple:
-        self._values.append(value)
-        return self
-
-    def finish(self, stream: io.TextIOBase):
-        pass
-
-
 def width_list(cols: int, col_widths: list[int], indent: int):
     return sum(col_widths) + (cols - 1) * 2 + indent + 1
 
 
-def estimate_list_widths(
+def estimate_seq_widths(
     widths: list[int], indentation: int, max_width: int, columns: int = 10
 ) -> tuple[int, list[int]]:
     columns = min(len(widths), columns)
@@ -59,18 +45,20 @@ def estimate_list_widths(
     return cols, col_widths
 
 
-class FormatList(Format):
-    def __init__(self, formatter: Formatter):
+class FormatSeq(Format):
+    def __init__(self, formatter: Formatter, bracket_head: str, bracket_tail: str):
         super().__init__(formatter)
         self._values = []
         self._widths = []
         self._length = 0
         self._cache = None
+        self._head = bracket_head
+        self._tail = bracket_tail
 
-    def value(self, value: Any) -> FormatList:
+    def value(self, value: Any) -> FormatSeq:
         return self.value_with(lambda f: f.format_any(value))
 
-    def value_with(self, value_fmt: Callable[[Formatter], Format]) -> FormatList:
+    def value_with(self, value_fmt: Callable[[Formatter], Format]) -> FormatSeq:
         if len(self._widths) < self.formatter.max_elements():
             value = value_fmt(self.formatter)
             self._widths.append(value.width())
@@ -78,7 +66,7 @@ class FormatList(Format):
         self._length += 1
         return self
 
-    def values(self, values: IterableAndSized) -> FormatList:
+    def values(self, values: IterableAndSized) -> FormatSeq:
         self._length += len(values)
         offset = self.formatter.max_elements() - len(self._widths)
         values = [self.formatter.format_any(value) for value in islice(values, offset)]
@@ -90,7 +78,7 @@ class FormatList(Format):
         if len(self._values) == 0:
             return 2
         if self._cache is None:
-            self._cache = estimate_list_widths(
+            self._cache = estimate_seq_widths(
                 self._widths,
                 self.formatter.indent(),
                 self.formatter.width(),
@@ -100,7 +88,8 @@ class FormatList(Format):
 
     def finish(self, stream: io.TextIOBase):
         if len(self._values) == 0:
-            stream.write("[]")
+            stream.write(self._head)
+            stream.write(self._tail)
             return
         m = self.formatter.max_elements()
         widths = self._widths
@@ -109,7 +98,7 @@ class FormatList(Format):
             indent = self.formatter.indent()
             fixed_indent = self.formatter.fixed_indent()
             if self._cache is None:
-                self._cache = estimate_list_widths(
+                self._cache = estimate_seq_widths(
                     widths,
                     indent,
                     self.formatter.width(),
@@ -119,7 +108,8 @@ class FormatList(Format):
             q, r = divmod(len(seq), n)
 
             if n == 1:
-                stream.write("[\n")
+                stream.write(self._head)
+                stream.write("\n")
                 imax = len(self._values)
                 stream.write(" " * indent)
                 for i, value in enumerate(seq):
@@ -132,7 +122,8 @@ class FormatList(Format):
                 if self._length > m:
                     stream.write(" " * indent)
                     stream.write(f"... {self._length - m} more items\n")
-                stream.write(" " * (indent - fixed_indent) + "]")
+                stream.write(" " * (indent - fixed_indent))
+                stream.write(self._tail)
                 return
 
             def format_row(subseq: list[Format]):
@@ -148,7 +139,8 @@ class FormatList(Format):
                         stream.write(", ")
                 stream.write("\n")
 
-            stream.write("[\n")
+            stream.write(self._head)
+            stream.write("\n")
             for i in range(q):
                 format_row(seq[n * i : n * (i + 1)])
             if r > 0:
@@ -157,16 +149,33 @@ class FormatList(Format):
                 stream.write(" " * indent)
                 stream.write(f"... {self._length - m} more items\n")
             stream.write(" " * (indent - fixed_indent))
-            stream.write("]")
+            stream.write(self._tail)
             return
 
-        stream.write("[ ")
+        stream.write(self._head)
+        stream.write(" ")
         imax = len(self._values)
         for i, value in enumerate(self._values):
             value.finish(stream)
             if i + 1 != imax:
                 stream.write(", ")
-        stream.write(" ]")
+        stream.write(" ")
+        stream.write(self._tail)
+
+
+class FormatList(FormatSeq):
+    def __init__(self, formatter: Formatter):
+        super().__init__(formatter, "[", "]")
+
+
+class FormatTuple(FormatSeq):
+    def __init__(self, formatter: Formatter):
+        super().__init__(formatter, "(", ")")
+
+
+class FormatSet(FormatSeq):
+    def __init__(self, formatter: Formatter):
+        super().__init__(formatter, "{", "}")
 
 
 def estimate_dict_width(
@@ -397,9 +406,21 @@ def format_list(obj: list, f: Formatter) -> Format:
     return f.format_list().values(obj)
 
 
+def format_tuple(obj: tuple, f: Formatter) -> Format:
+    if f.depth() == 0:
+        return f.format_value().value("(tuple)")
+    return f.format_tuple().values(obj)
+
+
+def format_set(obj: set, f: Formatter) -> Format:
+    if f.depth() == 0:
+        return f.format_value().value("{set}")
+    return f.format_set().values(obj)
+
+
 def format_dict(obj: dict, f: Formatter) -> Format:
     if f.depth() == 0:
-        return f.format_value().value("[dict]")
+        return f.format_value().value("{dict}")
     return f.format_dict().items(obj.items())
 
 
@@ -409,6 +430,8 @@ class Formatter:
         int.__repr__: format_int,
         str.__repr__: format_str,
         list.__repr__: format_list,
+        tuple.__repr__: format_tuple,
+        set.__repr__: format_set,
         dict.__repr__: format_dict,
     }
     _context = {}
@@ -429,7 +452,7 @@ class Formatter:
     def format_dict(self) -> FormatDict:
         return FormatDict(self)
 
-    def format_list(self) -> FormatList:
+    def format_list(self) -> FormatSeq:
         return FormatList(self)
 
     def format_class(self, class_name: str) -> FormatClass:
@@ -437,6 +460,9 @@ class Formatter:
 
     def format_tuple(self) -> FormatTuple:
         return FormatTuple(self)
+
+    def format_set(self) -> FormatSet:
+        return FormatSet(self)
 
     def format_value(self) -> FormatValue:
         return FormatValue(self)
