@@ -207,7 +207,7 @@ class FormatSet(FormatSeq):
         super().__init__(formatter, "{", "}")
 
 
-def estimate_dict_width(
+def estimate_struct_width(
     keys: list[Format],
     values: list[Format],
     max_width: int,
@@ -224,12 +224,99 @@ def estimate_dict_width(
     return True, width
 
 
-class FormatDict(Format):
-    def __init__(self, formatter: Formatter):
+class StructFormatter:
+    def __init__(
+        self,
+        formatter: Formatter,
+        keys: list[Format],
+        values: list[Format],
+        class_name: Format | None = None,
+    ):
+        self.formatter = formatter
+        self._keys = keys
+        self._values = values
+        self._class_name = class_name
+
+    def multilines(self, stream: io.TextIOBase):
+        indent = self.formatter.indent()
+        fixed_indent = self.formatter.fixed_indent()
+        m = self.formatter.max_elements()
+
+        if self._class_name is not None:
+            self._class_name.finish(stream)
+        stream.write(" {\n")
+        for key, value in zip(self._keys[:m], self._values[:m]):
+            stream.write(" " * indent)
+            key.finish(stream)
+            stream.write(": ")
+            value.finish(stream)
+            stream.write(",\n")
+        if len(self._values) > m:
+            stream.write(" " * indent + f"... {len(self._values) - m} more items\n")
+        stream.write(" " * (indent - fixed_indent))
+        stream.write("}")
+
+    def inline(self, stream: io.TextIOBase):
+        if self._class_name is not None:
+            self._class_name.finish(stream)
+        stream.write(" { ")
+        imax = len(self._values)
+        for i, (key, value) in enumerate(zip(self._keys, self._values)):
+            key.finish(stream)
+            stream.write(": ")
+            value.finish(stream)
+            if i + 1 != imax:
+                stream.write(", ")
+        stream.write(" }")
+
+
+class FormatStruct(Format):
+    def __init__(self, formatter: Formatter, class_name: Format | None = None):
         super().__init__(formatter)
         self._keys = []
         self._values = []
+        self._class_name = class_name
         self._cache = None
+
+    def width(self) -> int:
+        if self._cache is None:
+            self._cache = estimate_struct_width(
+                self._keys,
+                self._values,
+                self.formatter.width(),
+                self.formatter.indent(),
+                self.formatter.max_elements(),
+            )
+        return self._cache[1]
+
+    def finish(self, stream: io.TextIOBase):
+        struct_formatter = StructFormatter(
+            self.formatter,
+            self._keys,
+            self._values,
+            self._class_name,
+        )
+
+        multiple_lines = self._cache[0]  # type: ignore
+        if multiple_lines:
+            return struct_formatter.multilines(stream)
+        return struct_formatter.inline(stream)
+
+
+def check_items(length_keys: int, length_values: int):
+    if length_keys < length_values:
+        raise ValueError(
+            f"Missing keys (length keys: {length_keys}, length values: {length_values})"
+        )
+    if length_keys > length_values:
+        raise ValueError(
+            f"Missing values (length keys: {length_keys}, length values: {length_values})"
+        )
+
+
+class FormatDict(FormatStruct):
+    def __init__(self, formatter: Formatter):
+        super().__init__(formatter)
 
     def key(self, key: Any) -> FormatDict:
         return self.key_with(lambda f: f.format_any(key))
@@ -254,80 +341,25 @@ class FormatDict(Format):
         return self
 
     def width(self) -> int:
-        lkeys = len(self._keys)
-        lvalues = len(self._values)
-        if lkeys < lvalues:
-            raise ValueError(
-                f"Missing keys (length keys: {lkeys}, length values: {lvalues})"
-            )
-        if lkeys > lvalues:
-            raise ValueError(
-                f"Missing values (length keys: {lkeys}, length values: {lvalues})"
-            )
-        if self._cache is None:
-            self._cache = estimate_dict_width(
-                self._keys,
-                self._values,
-                self.formatter.width(),
-                self.formatter.indent(),
-                self.formatter.max_elements(),
-            )
-        return self._cache[1]
+        check_items(len(self._keys), len(self._values))
+        return super().width()
 
     def finish(self, stream: io.TextIOBase):
-        lkeys = len(self._keys)
-        lvalues = len(self._values)
-        if lkeys < lvalues:
-            raise ValueError(
-                f"Missing keys (length keys: {lkeys}, length values: {lvalues})"
-            )
-        if lkeys > lvalues:
-            raise ValueError(
-                f"Missing values (length keys: {lkeys}, length values: {lvalues})"
-            )
+        check_items(len(self._keys), len(self._values))
         if self._cache is None:
-            self._cache = estimate_dict_width(
+            self._cache = estimate_struct_width(
                 self._keys,
                 self._values,
                 self.formatter.width(),
                 self.formatter.indent(),
                 self.formatter.max_elements(),
             )
-        multiple_lines = self._cache[0]
-        indent = self.formatter.indent()
-        fixed_indent = self.formatter.fixed_indent()
-        m = self.formatter.max_elements()
-        if multiple_lines:
-            stream.write("{\n")
-            for key, value in zip(self._keys[:m], self._values[:m]):
-                stream.write(" " * indent)
-                key.finish(stream)
-                stream.write(": ")
-                value.finish(stream)
-                stream.write(",\n")
-            if len(self._values) > m:
-                stream.write(" " * indent + f"... {len(self._values) - m} more items\n")
-            stream.write(" " * (indent - fixed_indent))
-            stream.write("}")
-            return
-        stream.write("{ ")
-        imax = len(self._values)
-        for i, (key, value) in enumerate(zip(self._keys, self._values)):
-            key.finish(stream)
-            stream.write(": ")
-            value.finish(stream)
-            if i + 1 != imax:
-                stream.write(", ")
-        stream.write(" }")
+        return super().finish(stream)
 
 
-class FormatClass(Format):
+class FormatClass(FormatStruct):
     def __init__(self, class_name: str, formatter: Formatter):
-        super().__init__(formatter)
-        self._class_name = self.formatter.format_value().value(class_name)
-        self._names = []
-        self._values = []
-        self._cache = None
+        super().__init__(formatter, formatter.format_value().value(class_name))
 
     def field(self, name: str, value: Any) -> FormatClass:
         return self.field_with(name, lambda f: f.format_any(value))
@@ -335,29 +367,23 @@ class FormatClass(Format):
     def field_with(
         self, name: str, value_fmt: Callable[[Formatter], Format]
     ) -> FormatClass:
-        self._names.append(self.formatter.format_value().value(name))
+        self._keys.append(self.formatter.format_value().value(name))
         self._values.append(value_fmt(self.formatter))
         return self
 
     def width(self) -> int:
-        if self._cache is None:
-            multiple_lines, width = estimate_dict_width(
-                self._names,
-                self._values,
-                self.formatter.width(),
-                self.formatter.indent(),
-                self.formatter.max_elements(),
-            )
-            if multiple_lines:
-                self._cache = (multiple_lines, width)
-            else:
-                self._cache = (multiple_lines, width + self._class_name.width() + 1)
+        super().width()
+        multiple_lines, width = self._cache  # type: ignore
+        if multiple_lines:
+            self._cache = (multiple_lines, width)
+        else:
+            self._cache = (multiple_lines, width + self._class_name.width() + 1)  # type: ignore
         return self._cache[1]
 
     def finish(self, stream: io.TextIOBase):
         if self._cache is None:
-            multiple_lines, width = estimate_dict_width(
-                self._names,
+            multiple_lines, width = estimate_struct_width(
+                self._keys,
                 self._values,
                 self.formatter.width(),
                 self.formatter.indent(),
@@ -366,35 +392,8 @@ class FormatClass(Format):
             if multiple_lines:
                 self._cache = (multiple_lines, width)
             else:
-                self._cache = (multiple_lines, width + self._class_name.width() + 1)
-        multiple_lines = self._cache[0]
-        indent = self.formatter.indent()
-        fixed_indent = self.formatter.fixed_indent()
-        m = self.formatter.max_elements()
-        if multiple_lines:
-            self._class_name.finish(stream)
-            stream.write(" {\n")
-            for key, value in zip(self._names[:m], self._values[:m]):
-                stream.write(" " * indent)
-                key.finish(stream)
-                stream.write(": ")
-                value.finish(stream)
-                stream.write(",\n")
-            if len(self._values) > m:
-                stream.write(" " * indent + f"... {len(self._values) - m} more items\n")
-            stream.write(" " * (indent - fixed_indent))
-            stream.write("}")
-            return
-        self._class_name.finish(stream)
-        stream.write(" { ")
-        imax = len(self._values)
-        for i, (key, value) in enumerate(zip(self._names, self._values)):
-            key.finish(stream)
-            stream.write(": ")
-            value.finish(stream)
-            if i + 1 != imax:
-                stream.write(", ")
-        stream.write(" }")
+                self._cache = (multiple_lines, width + self._class_name.width() + 1)  # type: ignore
+        return super().finish(stream)
 
 
 class FormatValue(Format):
