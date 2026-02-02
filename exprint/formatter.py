@@ -266,8 +266,11 @@ class StructFormatter:
         if self._class_name is not None:
             self._class_name.finish(stream)
             stream.write(" ")
-        stream.write("{ ")
         imax = len(self._values)
+        if imax == 0:
+            stream.write("{}")
+            return
+        stream.write("{ ")
         for i, (key, value) in enumerate(zip(self._keys, self._values)):
             key.finish(stream)
             stream.write(": ")
