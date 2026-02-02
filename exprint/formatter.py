@@ -522,53 +522,27 @@ class Formatter:
 
     def format_any(self, obj: Any) -> Format:
         objid = id(obj)
+        next_formatter = Formatter(
+            self._fixed_indentation,
+            self._depth - 1,
+            self._width,
+            self._max_elements,
+        ).with_indent(self._indent + self._fixed_indentation)
         if objid in self._context:
-            return self._dispatch_repr["recursion"](
-                obj,
-                Formatter(
-                    self._fixed_indentation,
-                    self._depth - 1,
-                    self._width,
-                    self._max_elements,
-                ).with_indent(self._indent + self._fixed_indentation),
-            )
+            return self._dispatch_repr["recursion"](obj, next_formatter)
 
         format_func = self._dispatch_objs.get(type(obj).__repr__)
         if format_func is None:
             if is_dataclass(obj):
-                return self._dispatch_repr["dataclass"](
-                    obj,
-                    Formatter(
-                        self._fixed_indentation,
-                        self._depth - 1,
-                        self._width,
-                        self._max_elements,
-                    ).with_indent(self._indent + self._fixed_indentation),
-                )
+                return self._dispatch_repr["dataclass"](obj, next_formatter)
             if hasattr(obj, "__dict__"):
-                return self._dispatch_repr["class"](
-                    obj,
-                    Formatter(
-                        self._fixed_indentation,
-                        self._depth - 1,
-                        self._width,
-                        self._max_elements,
-                    ).with_indent(self._indent + self._fixed_indentation),
-                )
+                return self._dispatch_repr["class"](obj, next_formatter)
             raise NotImplementedError(f"No format function found for {type(obj)}")
-        else:
-            self._context[objid] = 1
-            f = format_func(
-                obj,
-                Formatter(
-                    self._fixed_indentation,
-                    self._depth - 1,
-                    self._width,
-                    self._max_elements,
-                ).with_indent(self._indent + self._fixed_indentation),
-            )
-            del self._context[objid]
-            return f
+
+        self._context[objid] = 1
+        f = format_func(obj, next_formatter)
+        del self._context[objid]
+        return f
 
     def with_indent(self, indent: int) -> Formatter:
         self._indent = indent
