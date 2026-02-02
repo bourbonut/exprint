@@ -46,6 +46,89 @@ def estimate_seq_widths(
     return cols, col_widths
 
 
+class SeqFormatter:
+    def __init__(self, format_seq: FormatSeq):
+        self.formatter = format_seq.formatter
+        self._values = format_seq._values
+        self._length = format_seq._length
+        self._head = format_seq._head
+        self._tail = format_seq._tail
+
+    def format_row(
+        self,
+        stream: io.TextIOBase,
+        subseq: list[Format],
+        indent: int,
+        col_widths: list[int],
+    ):
+        stream.write(" " * indent)
+        imax = len(subseq)
+        for i, (col_width, value) in enumerate(zip(col_widths, subseq)):
+            width = value.width()
+            stream.write((col_width - width) * " ")
+            value.finish(stream)
+            if i + 1 == imax:
+                stream.write(",")
+            else:
+                stream.write(", ")
+        stream.write("\n")
+
+    def inline(self, stream: io.TextIOBase):
+        stream.write(self._head)
+        stream.write(" ")
+        imax = len(self._values)
+        for i, value in enumerate(self._values):
+            value.finish(stream)
+            if i + 1 != imax:
+                stream.write(", ")
+        stream.write(" ")
+        stream.write(self._tail)
+
+    def monocolumn(self, stream: io.TextIOBase):
+        indent = self.formatter.indent()
+        fixed_indent = self.formatter.fixed_indent()
+        m = self.formatter.max_elements()
+
+        stream.write(self._head)
+        stream.write("\n")
+        imax = len(self._values)
+        stream.write(" " * indent)
+        for i, value in enumerate(self._values):
+            value.finish(stream)
+            if i + 1 != imax:
+                stream.write(",\n")
+                stream.write(" " * indent)
+            else:
+                stream.write(",\n")
+        if self._length > m:
+            stream.write(" " * indent)
+            stream.write(f"... {self._length - m} more items\n")
+        stream.write(" " * (indent - fixed_indent))
+        stream.write(self._tail)
+
+    def multicolumns(self, stream: io.TextIOBase, n: int, col_widths: list[int]):
+        indent = self.formatter.indent()
+        fixed_indent = self.formatter.fixed_indent()
+        m = self.formatter.max_elements()
+
+        seq = self._values
+        q, r = divmod(len(seq), n)
+        stream.write(self._head)
+        stream.write("\n")
+        for i in range(q):
+            self.format_row(stream, seq[n * i : n * (i + 1)], indent, col_widths)
+        if r > 0:
+            self.format_row(
+                stream, seq[n * (i + 1) : n * (i + 1) + r], indent, col_widths
+            )
+        if self._length > m:
+            stream.write(" " * indent)
+            stream.write(f"... {self._length - m} more items\n")
+        stream.write(" " * (indent - fixed_indent))
+        stream.write(self._tail)
+        return
+
+
 class FormatSeq(Format):
     def __init__(self, formatter: Formatter, bracket_head: str, bracket_tail: str):
         super().__init__(formatter)
@@ -93,75 +176,20 @@ class FormatSeq(Format):
             stream.write(self._tail)
             return
         m = self.formatter.max_elements()
+        max_width = self.formatter.width()
+        indent = self.formatter.indent()
+        seq_formatter = SeqFormatter(self)
         widths = self._widths
-        inline_width = sum(widths) + len(widths) * 2 + self.formatter.indent()
-        if len(self._values) > m or inline_width > self.formatter.width():
-            indent = self.formatter.indent()
-            fixed_indent = self.formatter.fixed_indent()
+        inline_width = sum(widths) + len(widths) * 2 + indent
+        if len(self._values) > m or inline_width > max_width:
             if self._cache is None:
-                self._cache = estimate_seq_widths(
-                    widths,
-                    indent,
-                    self.formatter.width(),
-                )
+                self._cache = estimate_seq_widths(widths, indent, max_width)
             n, col_widths = self._cache
-            seq = self._values
-            q, r = divmod(len(seq), n)
-
             if n == 1:
-                stream.write(self._head)
-                stream.write("\n")
-                imax = len(self._values)
-                stream.write(" " * indent)
-                for i, value in enumerate(seq):
-                    value.finish(stream)
-                    if i + 1 != imax:
-                        stream.write(",\n")
-                        stream.write(" " * indent)
-                    else:
-                        stream.write(",\n")
-                if self._length > m:
-                    stream.write(" " * indent)
-                    stream.write(f"... {self._length - m} more items\n")
-                stream.write(" " * (indent - fixed_indent))
-                stream.write(self._tail)
-                return
-
-            def format_row(subseq: list[Format]):
-                stream.write(" " * indent)
-                imax = len(subseq)
-                for i, (col_width, value) in enumerate(zip(col_widths, subseq)):
-                    width = value.width()
-                    stream.write((col_width - width) * " ")
-                    value.finish(stream)
-                    if i + 1 == imax:
-                        stream.write(",")
-                    else:
-                        stream.write(", ")
-                stream.write("\n")
-
-            stream.write(self._head)
-            stream.write("\n")
-            for i in range(q):
-                format_row(seq[n * i : n * (i + 1)])
-            if r > 0:
-                format_row(seq[n * (i + 1) : n * (i + 1) + r])
-            if self._length > m:
-                stream.write(" " * indent)
-                stream.write(f"... {self._length - m} more items\n")
-            stream.write(" " * (indent - fixed_indent))
-            stream.write(self._tail)
-            return
-
-        stream.write(self._head)
-        stream.write(" ")
-        imax = len(self._values)
-        for i, value in enumerate(self._values):
-            value.finish(stream)
-            if i + 1 != imax:
-                stream.write(", ")
-        stream.write(" ")
-        stream.write(self._tail)
+                return seq_formatter.monocolumn(stream)
+            else:
+                return seq_formatter.multicolumns(stream, n, col_widths)
+        return seq_formatter.inline(stream)
 
 
 class FormatList(FormatSeq):
