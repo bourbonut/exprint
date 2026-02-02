@@ -6,6 +6,8 @@ from dataclasses import asdict, is_dataclass
 from itertools import islice
 from typing import Any, Callable, Iterable, Iterator, Protocol, Sized
 
+from exprint.colors import ANSIColors
+
 __all__ = ["Formatter", "Format"]
 
 
@@ -421,48 +423,74 @@ class FormatValue(Format):
         stream.write(self._value)
 
 
+class FormatColor(Format):
+    RESET = ANSIColors.RESET.value
+
+    def __init__(self, formatter: Formatter, color: ANSIColors):
+        super().__init__(formatter)
+        self._color: str = color.value
+        self._value: Format = None
+
+    def value(self, value: Format) -> FormatColor:
+        self._value = value
+        return self
+
+    def width(self):
+        return self._value.width()
+
+    def finish(self, stream: io.TextIOBase):
+        if self.formatter.color():
+            stream.write(self._color)
+            self._value.finish(stream)
+            stream.write(self.RESET)
+        else:
+            self._value.finish(stream)
+
+
 def format_float(obj: float, f: Formatter) -> Format:
-    return f.format_value().value(obj)
+    return f.format_color(ANSIColors.YELLOW).value(f.format_value().value(obj))
 
 
 def format_int(obj: int, f: Formatter) -> Format:
-    return f.format_value().value(obj)
+    return f.format_color(ANSIColors.YELLOW).value(f.format_value().value(obj))
 
 
 def format_str(obj: str, f: Formatter) -> Format:
-    return f.format_value().value(f'"{obj}"')
+    return f.format_color(ANSIColors.GREEN).value(f.format_value().value(f'"{obj}"'))
 
 
 def format_bytes(obj: int, f: Formatter) -> Format:
-    return f.format_value().value(obj)
+    return f.format_color(ANSIColors.GREEN).value(f.format_value().value(obj))
 
 
 def format_list(obj: list, f: Formatter) -> Format:
     if f.depth() == 0:
-        return f.format_value().value("[list]")
+        return f.format_color(ANSIColors.CYAN).value(f.format_value().value("[list]"))
     return f.format_list().values(obj)
 
 
 def format_tuple(obj: tuple, f: Formatter) -> Format:
     if f.depth() == 0:
-        return f.format_value().value("(tuple)")
+        return f.format_color(ANSIColors.CYAN).value(f.format_value().value("(tuple)"))
     return f.format_tuple().values(obj)
 
 
 def format_set(obj: set, f: Formatter) -> Format:
     if f.depth() == 0:
-        return f.format_value().value("{set}")
+        return f.format_color(ANSIColors.CYAN).value(f.format_value().value("{set}"))
     return f.format_set().values(obj)
 
 
 def format_dict(obj: dict, f: Formatter) -> Format:
     if f.depth() == 0:
-        return f.format_value().value("{dict}")
+        return f.format_color(ANSIColors.CYAN).value(f.format_value().value("{dict}"))
     return f.format_dict().items(obj.items())
 
 
 def format_recursion(obj: Any, f: Formatter) -> Format:
-    return f.format_value().value("[recursion]")
+    return f.format_color(ANSIColors.MAGENTA).value(
+        f.format_value().value("[recursion]")
+    )
 
 
 def format_dataclass(obj: Any, f: Formatter) -> Format:
@@ -505,11 +533,13 @@ class Formatter:
         depth: int = 4,
         width: int = 88,
         max_elements: int = 100,
+        with_color: bool = True,
     ):
         self._fixed_indentation = indentation
         self._depth = depth
         self._width = width
         self._max_elements = max_elements
+        self._color = with_color
         self._indent = 0
 
     def format_dict(self) -> FormatDict:
@@ -530,6 +560,9 @@ class Formatter:
     def format_value(self) -> FormatValue:
         return FormatValue(self)
 
+    def format_color(self, color: ANSIColors) -> FormatColor:
+        return FormatColor(self, color)
+
     def format_any(self, obj: Any) -> Format:
         objid = id(obj)
         next_formatter = Formatter(
@@ -537,6 +570,7 @@ class Formatter:
             self._depth - 1,
             self._width,
             self._max_elements,
+            self._color,
         ).with_indent(self._indent + self._fixed_indentation)
         if objid in self._context:
             return self._dispatch_repr["recursion"](obj, next_formatter)
@@ -572,3 +606,6 @@ class Formatter:
 
     def max_elements(self) -> int:
         return self._max_elements
+
+    def color(self) -> bool:
+        return self._color
