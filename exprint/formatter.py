@@ -186,7 +186,7 @@ class FormatSeq(Format):
         seq_formatter = SeqFormatter(self)
         widths = self._widths
         inline_width = sum(widths) + len(widths) * 2 + indent
-        if len(self._values) > m or inline_width > max_width:
+        if self._length > m or inline_width > max_width:
             if self._cache is None:
                 self._cache = estimate_seq_widths(widths, indent, max_width)
             n, col_widths = self._cache
@@ -467,25 +467,25 @@ def format_bytes(obj: int, f: Formatter) -> Format:
 
 
 def format_list(obj: list, f: Formatter) -> Format:
-    if f.depth() == 0:
+    if f.depth() <= 0:
         return f.format_color(ANSIColors.CYAN).value(f.format_value().value("[list]"))
     return f.format_list().values(obj)
 
 
 def format_tuple(obj: tuple, f: Formatter) -> Format:
-    if f.depth() == 0:
+    if f.depth() <= 0:
         return f.format_color(ANSIColors.CYAN).value(f.format_value().value("(tuple)"))
     return f.format_tuple().values(obj)
 
 
 def format_set(obj: set, f: Formatter) -> Format:
-    if f.depth() == 0:
+    if f.depth() <= 0:
         return f.format_color(ANSIColors.CYAN).value(f.format_value().value("{set}"))
     return f.format_set().values(obj)
 
 
 def format_dict(obj: dict, f: Formatter) -> Format:
-    if f.depth() == 0:
+    if f.depth() <= 0:
         return f.format_color(ANSIColors.CYAN).value(f.format_value().value("{dict}"))
     return f.format_dict().items(obj.items())
 
