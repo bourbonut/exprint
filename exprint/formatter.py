@@ -4,11 +4,13 @@ import io
 from abc import ABC, abstractmethod
 from dataclasses import asdict, is_dataclass
 from itertools import islice
-from typing import Any, Callable, Iterable, Iterator, Protocol, Sized, TypeAlias
+from typing import Any, Callable, Iterable, Iterator, Protocol, Sized
 
 __all__ = ["Formatter", "Format"]
 
-ToString: TypeAlias = Any
+
+class ToString(Protocol):
+    def __str__(self) -> str: ...
 
 
 class SizedIterable(Iterable[Any], Sized, Protocol):
@@ -245,7 +247,8 @@ class StructFormatter:
 
         if self._class_name is not None:
             self._class_name.finish(stream)
-        stream.write(" {\n")
+            stream.write(" ")
+        stream.write("{\n")
         for key, value in zip(self._keys[:m], self._values[:m]):
             stream.write(" " * indent)
             key.finish(stream)
@@ -260,7 +263,8 @@ class StructFormatter:
     def inline(self, stream: io.TextIOBase):
         if self._class_name is not None:
             self._class_name.finish(stream)
-        stream.write(" { ")
+            stream.write(" ")
+        stream.write("{ ")
         imax = len(self._values)
         for i, (key, value) in enumerate(zip(self._keys, self._values)):
             key.finish(stream)
@@ -426,7 +430,11 @@ def format_int(obj: int, f: Formatter) -> Format:
 
 
 def format_str(obj: str, f: Formatter) -> Format:
-    return f.format_value().value(repr(obj))
+    return f.format_value().value(f'"{obj}"')
+
+
+def format_bytes(obj: int, f: Formatter) -> Format:
+    return f.format_value().value(obj)
 
 
 def format_list(obj: list, f: Formatter) -> Format:
@@ -476,6 +484,7 @@ class Formatter:
         float.__repr__: format_float,
         int.__repr__: format_int,
         str.__repr__: format_str,
+        bytes.__repr__: format_bytes,
         list.__repr__: format_list,
         tuple.__repr__: format_tuple,
         set.__repr__: format_set,
