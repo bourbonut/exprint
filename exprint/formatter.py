@@ -4,15 +4,16 @@ import io
 from abc import ABC, abstractmethod
 from dataclasses import asdict, is_dataclass
 from itertools import islice
-from typing import Any, Callable, Iterable, Protocol, Sized, TypeAlias
+from typing import Any, Callable, Iterable, Iterator, Protocol, Sized, TypeAlias
 
 __all__ = ["Formatter", "Format"]
 
 ToString: TypeAlias = Any
 
 
-class IterableAndSized(Iterable[Any], Sized, Protocol):
-    pass
+class SizedIterable(Iterable[Any], Sized, Protocol):
+    def __len__(self) -> int: ...
+    def __iter__(self) -> Iterator[Any]: ...
 
 
 class Format(ABC):
@@ -150,7 +151,7 @@ class FormatSeq(Format):
         self._length += 1
         return self
 
-    def values(self, values: IterableAndSized) -> FormatSeq:
+    def values(self, values: SizedIterable) -> FormatSeq:
         self._length += len(values)
         offset = self.formatter.max_elements() - len(self._widths)
         values = [self.formatter.format_any(value) for value in islice(values, offset)]
