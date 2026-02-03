@@ -1,7 +1,19 @@
 [project]
 name = "exprint"
 version = "0.1.0"
-description = "Add your description here"
+description = "exprint helps you explore data quickly by pretty-printing values with a flexible API"
 readme = "README.md"
+authors = [
+  { name = "Benjamin BOURBON", email = "ben.bourbon06@gmail.com"},
+]
 requires-python = ">=3.10"
 dependencies = []
+classifiers = [
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+license-files = ["LICENSE"]
