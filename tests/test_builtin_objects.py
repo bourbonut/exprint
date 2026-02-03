@@ -6,6 +6,12 @@ import pytest
 from exprint import ANSIColors, exprint
 
 
+def test_none():
+    stream = io.StringIO()
+    exprint(None, stream=stream, with_color=False)
+    assert stream.getvalue() == "None\n"
+
+
 @pytest.mark.parametrize(
     "input_value, with_color, expected",
     [
