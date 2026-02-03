@@ -2,9 +2,9 @@
 
 `exprint` helps you explore data quickly by pretty-printing values with a flexible API.
 
-# Examples
+# Features
 
-- Simple list
+- Pretty print with autoformat with colors
 
 ```py
 from exprint import exprint
@@ -31,6 +31,34 @@ exprint(seq)
   ... 900 more items
 ]
 ```
+
+- Flexible API
+
+```py
+from exprint import Format, Formatter, dispatch_obj, exprint
+
+class Example:
+    __slots__ = "foo", "bar"
+
+    def __init__(self, foo: str, bar: int):
+        self.foo = foo
+        self.bar = bar
+
+
+def format_example(obj: Example, f: Formatter) -> Format:
+    return f.format_class("Example").field("foo", obj.foo).field("bar", obj.bar)
+
+# Assiocate the format function to its type
+dispatch_obj(Example, format_example)
+
+exprint(Example("Hello", 10))
+# Output:
+# Example { foo: 'Hello', bar: 10 }
+```
+
+# Examples
+
+- Simple list
 
 - JSON data
 
@@ -72,30 +100,4 @@ exprint(data, max_elements=10)
     ... 9859 more items
   ],
 }
-``` 
-
-- Classes with `__slots__`:
-
-```py
-from exprint import Format, Formatter, dispatch_obj, exprint
-
-class Example:
-    __slots__ = "foo", "bar"
-
-    def __init__(self, foo: str, bar: int):
-        self.foo = foo
-        self.bar = bar
-
-
-def format_example(obj: Example, f: Formatter) -> Format:
-    return f.format_class("Example").field("foo", obj.foo).field("bar", obj.bar)
-
-# Assiocate the format function to its type
-dispatch_obj(Example, format_example)
-
-exprint(Example("Hello", 10))
-```
-
-```
-Example { foo: 'Hello', bar: 10 }
 ```
