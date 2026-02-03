@@ -511,7 +511,7 @@ def format_class(obj: Any, f: Formatter) -> Format:
 
 
 class Formatter:
-    _dispatch_objs = {
+    _dispatch_repr = {
         float.__repr__: format_float,
         int.__repr__: format_int,
         str.__repr__: format_str,
@@ -522,11 +522,13 @@ class Formatter:
         dict.__repr__: format_dict,
     }
 
-    _dispatch_repr = {
+    _dispatch_generic = {
         "recursion": format_recursion,
         "dataclass": format_dataclass,
         "class": format_class,
     }
+
+    _dispatch_objs = {}
 
     _context = {}
 
@@ -576,14 +578,16 @@ class Formatter:
             self._color,
         ).with_indent(self._indent + self._fixed_indentation)
         if objid in self._context:
-            return self._dispatch_repr["recursion"](obj, next_formatter)
+            return self._dispatch_generic["recursion"](obj, next_formatter)
 
-        format_func = self._dispatch_objs.get(type(obj).__repr__)
+        format_func = self._dispatch_repr.get(
+            type(obj).__repr__, self._dispatch_objs.get(type(obj).__name__)
+        )
         if format_func is None:
             if is_dataclass(obj):
-                return self._dispatch_repr["dataclass"](obj, next_formatter)
+                return self._dispatch_generic["dataclass"](obj, next_formatter)
             if hasattr(obj, "__dict__"):
-                return self._dispatch_repr["class"](obj, next_formatter)
+                return self._dispatch_generic["class"](obj, next_formatter)
             raise NotImplementedError(f"No format function found for {type(obj)}")
 
         self._context[objid] = 1

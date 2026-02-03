@@ -4,7 +4,7 @@ from typing import Any, Callable, TypeVar
 
 from .formatter import Format, Formatter
 
-__all__ = ["exprint", "dispatch_obj", "dispatch_repr"]
+__all__ = ["exprint", "dispatch_generic", "dispatch_obj", "dispatch_repr"]
 
 T = TypeVar("T")
 
@@ -25,9 +25,13 @@ def exprint(
     stream.write(end)
 
 
+def dispatch_repr(obj_type: type[T], format_func: Callable[[T, Formatter], Format]):
+    Formatter._dispatch_repr[obj_type.__repr__] = format_func
+
+
 def dispatch_obj(obj_type: type[T], format_func: Callable[[T, Formatter], Format]):
-    Formatter._dispatch_objs[obj_type.__repr__] = format_func
+    Formatter._dispatch_objs[obj_type.__name__] = format_func
 
 
-def dispatch_repr(repr_key: str, format_func: Callable[[Any, Formatter], Format]):
-    Formatter._dispatch_repr[repr_key] = format_func
+def dispatch_generic(gen_key: str, format_func: Callable[[Any, Formatter], Format]):
+    Formatter._dispatch_generic[gen_key] = format_func
