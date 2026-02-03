@@ -553,27 +553,109 @@ class Formatter:
         self._indent = 0
 
     def format_dict(self) -> FormatDict:
+        """
+        Creates a `FormatDict` object designed for dict-like structures.
+
+        Returns
+        -------
+        FormatDict
+            FormatDict object
+        """
         return FormatDict(self)
 
     def format_list(self) -> FormatSeq:
+        """
+        Creates a `FormatList` object designed for list-like structures.
+
+        Returns
+        -------
+        FormatList
+            FormatList object
+        """
         return FormatList(self)
 
     def format_class(self, class_name: str) -> FormatClass:
+        """
+        Creates a `FormatClass` object designed for class-like structures.
+
+        Parameters
+        ----------
+        class_name : str
+            Class name
+
+        Returns
+        -------
+        FormatClass
+            FormatClass object
+        """
         return FormatClass(class_name, self)
 
     def format_tuple(self) -> FormatTuple:
+        """
+        Creates a `FormatTuple` object designed for tuple-like structures.
+
+        Returns
+        -------
+        FormatTuple
+            FormatTuple object
+        """
         return FormatTuple(self)
 
     def format_set(self) -> FormatSet:
+        """
+        Creates a `FormatSet` object designed for set-like structures.
+
+        Returns
+        -------
+        FormatSet
+            FormatSet object
+        """
         return FormatSet(self)
 
     def format_value(self) -> FormatValue:
+        """
+        Creates a `FormatValue` object designed for single values which support
+        `__str__` method.
+
+        Returns
+        -------
+        FormatValue
+            FormatValue object
+        """
         return FormatValue(self)
 
     def format_color(self, color: ANSIColors) -> FormatColor:
+        """
+        Creates a `FormatColor` object designed to apply color formatting to
+        values.
+
+        Parameters
+        ----------
+        color : ANSIColors
+            Color value
+
+        Returns
+        -------
+        FormatColor
+            FormatColor object
+        """
         return FormatColor(self, color)
 
     def format_any(self, obj: Any) -> Format:
+        """
+        Formats any object based on registered format functions registered in
+        dispatch private attributes.
+
+        Parameters
+        ----------
+        obj : Any
+            Object to format
+
+        Returns
+        -------
+        Format
+            Format object
+        """
         objid = id(obj)
         next_formatter = Formatter(
             self._fixed_indentation,
@@ -601,23 +683,84 @@ class Formatter:
         return f
 
     def with_indent(self, indent: int) -> Formatter:
+        """
+        Updates the current indentation and returns itself
+
+        Parameters
+        ----------
+        indent : int
+            Indent value
+
+        Returns
+        -------
+        Formatter
+            Itself
+        """
         self._indent = indent
         return self
 
     def width(self) -> int:
+        """
+        Returns the maximum amount of allowed characters on one line.
+
+        Returns
+        -------
+        int
+            Width value
+        """
         return self._width
 
     def depth(self) -> int:
+        """
+        Returns the current depth of the nested object.
+
+        Returns
+        -------
+        int
+            Current depth value
+        """
         return self._depth
 
     def indent(self) -> int:
+        """
+        Returns the indentation of the nested object.
+
+        Returns
+        -------
+        int
+            Current indentation value
+        """
         return self._indent
 
     def fixed_indent(self) -> int:
+        """
+        Returns the fixed number of spaces used for each indentation level.
+
+        Returns
+        -------
+        int
+            Fixed indentation value
+        """
         return self._fixed_indentation
 
     def max_elements(self) -> int:
+        """
+        Returns the maximum amount of elements formatted for each object.
+
+        Returns
+        -------
+        int
+            Maximum elements
+        """
         return self._max_elements
 
     def color(self) -> bool:
+        """
+        Determines if colored output is enabled.
+
+        Returns
+        -------
+        bool
+            Color condition boolean
+        """
         return self._color
