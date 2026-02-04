@@ -21,23 +21,91 @@ class SizedIterable(Iterable[Any], Sized, Protocol):
 
 
 class Format(ABC):
+    """
+    Abstract class dealing with format classes.
+
+    Attributes
+    ----------
+    formatter : Formatter
+        Formatter class.
+    """
+
     def __init__(self, formatter: Formatter):
         self.formatter = formatter
 
     @abstractmethod
-    def width(self) -> int: ...
+    def width(self) -> int:
+        """
+        Returns the width of formatted text.
+
+        Returns
+        -------
+        int
+            Width of the formatted text.
+        """
+        ...
 
     @abstractmethod
-    def finish(self, stream: io.TextIOBase) -> str: ...
+    def finish(self, stream: io.TextIOBase):
+        """
+        Formats the content and outputs it into the specified text stream.
+
+        Parameters
+        ----------
+        stream : io.TextIOBase
+            Text stream in which the text content is written.
+        """
+        ...
 
 
-def width_list(cols: int, col_widths: list[int], indent: int):
+def width_seq(cols: int, col_widths: list[int], indent: int) -> int:
+    """
+    Returns the width of a sequence formatted in multiple lines.
+
+    Parameters
+    ----------
+    cols : int
+        Number of columns.
+    col_widths : list[int]
+        List of widths of each column.
+    indent : int
+        Current indentation.
+
+    Returns
+    -------
+    int
+        Width of the sequence.
+    """
     return sum(col_widths) + (cols - 1) * 2 + indent + 1
 
 
 def estimate_seq_widths(
     widths: list[int], indentation: int, max_width: int, columns: int = 10
 ) -> tuple[int, list[int]]:
+    """
+    Computes the minimum number of columns required for formatting the sequence
+    into multiple lines.
+
+    Parameters
+    ----------
+    widths : list[int]
+        Computed widths of each `Format` elements.
+    indentation : int
+        Current indentation.
+    max_width : int
+        Maximum width allowed.
+    columns : int
+        Initial number of columns.
+
+    Returns
+    -------
+    tuple[int, list[int]]
+        Number of columns and list of widths of each column
+
+    Notes
+    -----
+    This function is quite expensive due to its computing complexity.
+    """
     columns = min(len(widths), columns)
     for cols in range(columns, 0, -1):
         rows, els = divmod(len(widths), cols)
@@ -45,7 +113,7 @@ def estimate_seq_widths(
             max([widths[cols * i + c] for i in range(rows + int(c < els))])
             for c in range(cols)
         ]
-        width = width_list(cols, col_widths, indentation)
+        width = width_seq(cols, col_widths, indentation)
         if width < max_width:
             break
     return cols, col_widths
@@ -145,9 +213,48 @@ class FormatSeq(Format):
         self._tail = bracket_tail
 
     def value(self, value: Any) -> FormatSeq:
+        """
+        Adds a value to the sequence output.
+
+        Parameters
+        ----------
+        value : Any
+            Value to add.
+
+        Returns
+        -------
+        FormatSeq
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> f.format_list().value(seq[0])
+        """
         return self.value_with(lambda f: f.format_any(value))
 
     def value_with(self, value_fmt: Callable[[Formatter], Format]) -> FormatSeq:
+        """
+        Adds a value to the sequence output. Equivalent to `FormatSeq.value`
+        but formats the value using a function.
+
+        Parameters
+        ----------
+        value_fmt : Callable[[Formatter], Format]
+            Value function.
+
+        Returns
+        -------
+        FormatSeq
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> f.format_list().value_with(lambda f: f.format_any(seq[0]))
+        """
         if len(self._widths) < self.formatter.max_elements():
             value = value_fmt(self.formatter)
             self._widths.append(value.width())
@@ -156,6 +263,25 @@ class FormatSeq(Format):
         return self
 
     def values(self, values: SizedIterable) -> FormatSeq:
+        """
+        Adds all values to the sequence output.
+
+        Parameters
+        ----------
+        values : SizedIterable
+            Sequence of values which must be iterable and sized.
+
+        Returns
+        -------
+        FormatSeq
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> f.format_list().values(seq)
+        """
         self._length += len(values)
         offset = self.formatter.max_elements() - len(self._widths)
         values = [self.formatter.format_any(value) for value in islice(values, offset)]
@@ -173,7 +299,7 @@ class FormatSeq(Format):
                 self.formatter.width(),
             )
         cols, col_widths = self._cache
-        return width_list(cols, col_widths, self.formatter.indent())
+        return width_seq(cols, col_widths, self.formatter.indent())
 
     def finish(self, stream: io.TextIOBase):
         if len(self._values) == 0:
@@ -198,16 +324,22 @@ class FormatSeq(Format):
 
 
 class FormatList(FormatSeq):
+    """Class for formatting list of items."""
+
     def __init__(self, formatter: Formatter):
         super().__init__(formatter, "[", "]")
 
 
 class FormatTuple(FormatSeq):
+    """Class for formatting tuple of items."""
+
     def __init__(self, formatter: Formatter):
         super().__init__(formatter, "(", ")")
 
 
 class FormatSet(FormatSeq):
+    """Class for formatting set of items."""
+
     def __init__(self, formatter: Formatter):
         super().__init__(formatter, "{", "}")
 
@@ -219,6 +351,29 @@ def estimate_struct_width(
     indent: int,
     max_elements: int,
 ) -> tuple[bool, int]:
+    """
+    Returns if all pairs of key-values can be written on one line and the
+    required width for formatting pairs of key-values.
+
+    Parameters
+    ----------
+    keys : list[Format]
+        List of keys
+    values : list[Format]
+        List of values
+    max_width : int
+        Maximum width allowed.
+    indent : int
+        Current indentation
+    max_elements : int
+        Maximum of elements allowed.
+
+    Returns
+    -------
+    tuple[bool, int]
+        Boolean which represents multiple lines or inline format and the width
+        occupied by the formatted pairs of key-values.
+    """
     m = max_elements
     kwidths = [k.width() for k in keys]
     vwidths = [v.width() for v in values]
@@ -314,6 +469,21 @@ class FormatStruct(Format):
 
 
 def check_items(length_keys: int, length_values: int):
+    """
+    Checks if there are as many keys as values.
+
+    Parameters
+    ----------
+    length_keys : int
+        Length of keys
+    length_values : int
+        Length of values
+
+    Raises
+    ------
+    ValueError
+        If missing keys or missing values
+    """
     if length_keys < length_values:
         raise ValueError(
             f"Missing keys (length keys: {length_keys}, length values: {length_values})"
@@ -325,27 +495,152 @@ def check_items(length_keys: int, length_values: int):
 
 
 class FormatDict(FormatStruct):
+    """Class for formatting dictionary of items."""
+
     def __init__(self, formatter: Formatter):
         super().__init__(formatter)
 
     def key(self, key: Any) -> FormatDict:
+        """
+        Adds a key to the dictionary output.
+
+        Parameters
+        ----------
+        key : Any
+            Key to add.
+
+        Returns
+        -------
+        FormatDict
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> key = list(map.keys())[0]
+        >>> f.format_dict().key(key)
+        """
         return self.key_with(lambda f: f.format_any(key))
 
     def key_with(self, key_fmt: Callable[[Formatter], Format]) -> FormatDict:
+        """
+        Adds a key to the dictionary output. Equivalent to `FormatDict.key` but
+        formats the value using a function.
+
+        Parameters
+        ----------
+        key_fmt : Callable[[Formatter], Format]
+            Key function.
+
+        Returns
+        -------
+        FormatDict
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> key = list(map.keys())[0]
+        >>> f.format_dict().key_with(lambda f: f.format_any(key))
+        """
         self._keys.append(key_fmt(self.formatter))
         return self
 
     def value(self, value: Any) -> FormatDict:
+        """
+        Adds a value to the dictionary output.
+
+        Parameters
+        ----------
+        value : Any
+            Value to add.
+
+        Returns
+        -------
+        FormatDict
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> value = list(map.values())[0]
+        >>> f.format_dict().value(value)
+        """
         return self.value_with(lambda f: f.format_any(value))
 
     def value_with(self, value_fmt: Callable[[Formatter], Format]) -> FormatDict:
+        """
+        Adds a value to the dictionary output. Equivalent to `FormatDict.value`
+        but formats the value using a function.
+
+        Parameters
+        ----------
+        value : Any
+            Value to add.
+
+        Returns
+        -------
+        FormatDict
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> value = list(map.values())[0]
+        >>> f.format_dict().value_with(lambda f: f.format_any(value))
+        """
         self._values.append(value_fmt(self.formatter))
         return self
 
     def item(self, key: Any, value: Any) -> FormatDict:
+        """
+        Adds a pair of key-value to the dictionary output.
+
+        Parameters
+        ----------
+        key : Any
+            Key to add.
+        value : Any
+            Value to add.
+
+        Returns
+        -------
+        FormatDict
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> key, value = list(map.items())[0]
+        >>> f.format_dict().item(key, value)
+        """
         return self.key(key).value(value)
 
     def items(self, values: Iterable[tuple[Any, Any]]) -> FormatDict:
+        """
+        Adds all pairs of key-values to the dictionary output.
+
+        Parameters
+        ----------
+        values : Iterable[tuple[Any, Any]]
+            Pair of key-values
+
+        Returns
+        -------
+        FormatDict
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> f.format_dict().items(map.items())
+        """
         for key, value in values:
             self.item(key, value)
         return self
@@ -368,15 +663,67 @@ class FormatDict(FormatStruct):
 
 
 class FormatClass(FormatStruct):
+    """
+    Class for formatting classes.
+
+    Parameters
+    ----------
+    class_name : str
+        Class name
+    """
+
     def __init__(self, class_name: str, formatter: Formatter):
         super().__init__(formatter, formatter.format_value().value(class_name))
 
     def field(self, name: str, value: Any) -> FormatClass:
+        """
+        Adds a field to the class output.
+
+        Parameters
+        ----------
+        name : str
+            Name of the field.
+        value : Any
+            Value of the field.
+
+        Returns
+        -------
+        FormatClass
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> f.format_class("MyClass").field("foo", obj.foo)
+        """
         return self.field_with(name, lambda f: f.format_any(value))
 
     def field_with(
         self, name: str, value_fmt: Callable[[Formatter], Format]
     ) -> FormatClass:
+        """
+        Adds a field to the class output. Equivalent to `FormatClass.field` but
+        formats the value using a function.
+
+        Parameters
+        ----------
+        name : str
+            Name of the field.
+        value_fmt : Callable[[Formatter], Format]
+            Value function.
+
+        Returns
+        -------
+        FormatClass
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> f.format_class("MyClass").field_with("foo", lambda f: f.format_any(obj.foo))
+        """
         self._keys.append(self.formatter.format_value().value(name))
         self._values.append(value_fmt(self.formatter))
         return self
@@ -407,12 +754,33 @@ class FormatClass(FormatStruct):
 
 
 class FormatValue(Format):
+    """Class for formatting single values."""
+
     def __init__(self, formatter: Formatter):
         super().__init__(formatter)
         self._value = None
         self._width = 0
 
     def value(self, value: ToString) -> FormatValue:
+        """
+        Adds a value to the formatter. The value must have a `__str__` method.
+
+        Parameters
+        ----------
+        value : ToString
+            Value to add.
+
+        Returns
+        -------
+        FormatValue
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> f.format_value().value(10.286)
+        """
         self._value = str(value)
         self._width = len(self._value)
         return self
@@ -427,6 +795,15 @@ class FormatValue(Format):
 
 
 class FormatColor(Format):
+    """
+    Class for coloring values.
+
+    Parameters
+    ----------
+    color : ANSIColors
+        ANSI color code
+    """
+
     RESET = ANSIColors.RESET.value
 
     def __init__(self, formatter: Formatter, color: ANSIColors):
@@ -435,6 +812,26 @@ class FormatColor(Format):
         self._value: Format = None
 
     def value(self, value: Format) -> FormatColor:
+        """
+        Adds the value to the formatter.
+
+        Parameters
+        ----------
+        value : Format
+            Value to add.
+
+        Returns
+        -------
+        FormatColor
+            Itself
+
+        Examples
+        --------
+
+        >>> f = Formatter()
+        >>> value = f.format_value().value(10.286)
+        >>> f.format_color(ANSIColors.BLUE).value(value)
+        """
         self._value = value
         return self
 
@@ -515,6 +912,28 @@ def format_class(obj: Any, f: Formatter) -> Format:
 
 
 class Formatter:
+    """
+    Main class for formatting any type.
+
+    Parameters
+    ----------
+    indentation : int
+        Number of spaces used for each indentation level
+    depth : int
+        For nested objects, this value reflects the depth to which nested
+        objects are pretty-printed. For example, when `depth` is less than 0,
+        list objects are formatted as `[list]` values and dict objects are
+        formatted as `{dict}` values.
+    width : int
+        The maximum amount of allowed characters on one line.
+    max_elements : int
+        The maximum amount of elements formatted for each object.
+    end : str
+        A string added at the end after the formatted object.
+    with_color : bool
+        If `True`, enables colored output for better readability
+    """
+
     _dispatch_repr = {
         type(None).__repr__: format_none,
         float.__repr__: format_float,
