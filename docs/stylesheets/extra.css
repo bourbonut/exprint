@@ -1,0 +1,35 @@
+/* Inspired by: https://glitchcomet.com/articles/1024-bit-primes; "It collects **entropy** from the ..." */
+.colored {
+    display: inline-flex;
+    flex-direction: row;
+    span {
+        font-style: italic;
+        display: inline-block;
+        animation: wave 0.9s cubic-bezier(0.37, 0, 0.63, 1) infinite,
+                   gradient 8s linear infinite;
+
+        background: linear-gradient(
+            90deg,
+            rgba(249,107,136,1) 0%,
+            rgba(255,193,119,1) 20%,
+            rgba(178,114,196,1) 50%,
+            rgba(111,186,241,1) 80%,
+            rgba(249,107,136,1) 100%
+        );
+        color: #000;
+        background-size: 800% auto;
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+}
+
+@keyframes gradient {
+    to { background-position: 800% center; }
+}
+
+@keyframes wave {
+    0%   { transform: translateY(-0.1em); }
+    50%   { transform: translateY(+0.1em); }
+    100%   { transform: translateY(-0.1em); }
+}
