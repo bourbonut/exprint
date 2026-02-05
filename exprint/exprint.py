@@ -95,17 +95,19 @@ def dispatch_repr(obj_type: type[T], format_func: Callable[[T, Formatter], Forma
     Formatter._dispatch_repr[obj_type.__repr__] = format_func
 
 
-def dispatch_obj(obj_type: type[T], format_func: Callable[[T, Formatter], Format]):
+def dispatch_obj(
+    obj_type: type[T] | str, format_func: Callable[[T, Formatter], Format]
+):
     """
     Registers format function associated to the `__name__` attribute of an
     object type.
 
     Parameters
     ----------
-    obj_type : type[T]
-        Object type
+    obj_type : type[T] | str
+        Object type or string which refers to the object type.
     format_func : Callable[[T, Formatter], Format]
-        Format function
+        Format function.
 
     Examples
     --------
@@ -124,7 +126,10 @@ def dispatch_obj(obj_type: type[T], format_func: Callable[[T, Formatter], Format
     dispatch_repr : Format functions for types with `__repr__` method.
     dispatch_generic : Format functions for generic objects.
     """
-    Formatter._dispatch_objs[obj_type.__name__] = format_func
+    if isinstance(obj_type, str):
+        Formatter._dispatch_objs[obj_type] = format_func
+    else:
+        Formatter._dispatch_objs[obj_type.__name__] = format_func
 
 
 def dispatch_generic(gen_key: str, format_func: Callable[[Any, Formatter], Format]):
