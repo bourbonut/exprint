@@ -73,6 +73,7 @@ with open("./counties-10m.json") as file:
 exprint(data, max_elements=10)
 ```
 
+In your terminal, you will have a colored output.
 ```
 {
   'type': 'Topology',
