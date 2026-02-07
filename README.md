@@ -4,7 +4,7 @@
 
 # Features
 
-- Pretty print with autoformat with colors
+- Automatic indentation and colored output (test it in your terminal)
 
 ```py
 from exprint import exprint
@@ -56,11 +56,7 @@ exprint(Example("Hello", 10))
 # Example { foo: 'Hello', bar: 10 }
 ```
 
-# Examples
-
-- Simple list
-
-- JSON data
+# Example
 
 ```python
 import json
