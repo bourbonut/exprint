@@ -56,6 +56,7 @@ plugins:
           docstring_style: numpy
           show_if_no_docstring: true
           show_docstring_attributes: false
+          show_signature_annotations: true
           show_symbol_type_heading: true
           show_symbol_type_toc: true
           separate_signature: true
@@ -63,6 +64,7 @@ plugins:
           merge_init_into_class: true
           parameter_headings: true
           show_bases: false
+          filters: ["!^_"]
 
 extra:
   social:
@@ -79,5 +81,19 @@ extra_css:
 nav:
   - Home: index.md
   - Guide: guide.md
+  - API:
+    - api/index.md
+    - api/exprint.md
+    - "exprint.formatter":
+      - api/formatter/format.md
+      - api/formatter/formatter.md
+      - api/formatter/format_class.md
+      - api/formatter/format_color.md
+      - api/formatter/format_dict.md
+      - api/formatter/format_list.md
+      - api/formatter/format_set.md
+      - api/formatter/format_tuple.md
+      - api/formatter/format_value.md
+    - api/colors.md
  
 copyright: Copyright &copy; bourbonut
