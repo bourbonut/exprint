@@ -17,3 +17,8 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 license-files = ["LICENSE"]
+
+[project.urls]
+Homepage="https://github.com/bourbonut/exprint"
+Repository="https://github.com/bourbonut/exprint"
+Documentation="https://exprint.readthedocs.io/"
