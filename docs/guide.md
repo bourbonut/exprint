@@ -47,7 +47,7 @@ NotImplementedError: No format function found for <class 'builtins.TopoJSON'>
 
 That's is because `TopoJSON` is not supported by default by `exprint` (see supported default objects).
 
-In `topojson` package, a `topojson.TopoJSON` has four attributes:
+In `topojson` package, a `topojson.TopoJSON` has [four attributes](https://topojson-rs.readthedocs.io/en/latest/api/topojson/#topojson.TopoJSON):
 
 - `transform`: `Optional[topojson.Transform]`
 - `objects`: `dict[str, Geometry]`
@@ -100,7 +100,7 @@ NotImplementedError: No format function found for <class 'builtins.Transform'>
 
 Alright, we need also to create a function for formatting a `topojson.Transform` object.
 
-In `topojson` package, a `topojson.Transform` has two attributes:
+In `topojson` package, a `topojson.Transform` has [two attributes](https://topojson-rs.readthedocs.io/en/latest/api/transform/#topojson.Transform):
 
 - `scale`: `list[float]`
 - `translate`: `list[float]`
