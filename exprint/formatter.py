@@ -24,11 +24,14 @@ class Format(ABC):
     """
     Abstract class dealing with format classes.
 
-    Attributes
+    Parameters
     ----------
     formatter : Formatter
         Formatter class.
     """
+
+    formatter: Formatter
+    """Formatter class."""
 
     def __init__(self, formatter: Formatter):
         self.formatter = formatter
@@ -578,8 +581,8 @@ class FormatDict(FormatStruct):
 
         Parameters
         ----------
-        value : Any
-            Value to add.
+        value_fmt : Callable[[Formatter], Format]
+            Value function.
 
         Returns
         -------
@@ -928,8 +931,6 @@ class Formatter:
         The maximum amount of allowed characters on one line.
     max_elements : int
         The maximum amount of elements formatted for each object.
-    end : str
-        A string added at the end after the formatted object.
     with_color : bool
         If `True`, enables colored output for better readability
     """
@@ -982,7 +983,7 @@ class Formatter:
         """
         return FormatDict(self)
 
-    def format_list(self) -> FormatSeq:
+    def format_list(self) -> FormatList:
         """
         Creates a `FormatList` object designed for list-like structures.
 
