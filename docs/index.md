@@ -67,7 +67,7 @@ In your terminal, you will have a
 </span>
 output.
 
-```
+```{ #hlcode }
 {
   'type': 'Topology',
   'bbox': [ -179.14733999999999, -14.552548999999999, 179.77847, 71.352561 ],

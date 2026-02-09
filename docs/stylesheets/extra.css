@@ -33,3 +33,15 @@
     50%   { transform: translateY(+0.1em); }
     100%   { transform: translateY(-0.1em); }
 }
+
+.hl-string {
+  color: #3fb850;
+}
+
+.hl-list {
+  color: #38c3cd;
+}
+
+.hl-number {
+  color: #ce9622;
+}
