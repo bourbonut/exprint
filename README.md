@@ -2,6 +2,8 @@
 
 `exprint` helps you explore data quickly by pretty-printing values with a flexible API.
 
+- [Documentation](https://exprint.readthedocs.io/)
+
 # Features
 
 - Automatic indentation and colored output (test it in your terminal)
