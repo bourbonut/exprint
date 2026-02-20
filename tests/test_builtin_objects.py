@@ -15,6 +15,18 @@ def test_none():
 @pytest.mark.parametrize(
     "input_value, with_color, expected",
     [
+        [True, False, "True\n"],
+        [
+            True,
+            True,
+            f"{ANSIColors.YELLOW.value}True{ANSIColors.RESET.value}\n",
+        ],
+        [False, False, "False\n"],
+        [
+            False,
+            True,
+            f"{ANSIColors.YELLOW.value}False{ANSIColors.RESET.value}\n",
+        ],
         [10, False, "10\n"],
         [
             10,

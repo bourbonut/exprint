@@ -854,6 +854,10 @@ def format_none(obj: None, f: Formatter) -> Format:
     return f.format_value().value(obj)
 
 
+def format_bool(obj: None, f: Formatter) -> Format:
+    return f.format_color(ANSIColors.YELLOW).value(f.format_value().value(obj))
+
+
 def format_float(obj: float, f: Formatter) -> Format:
     return f.format_color(ANSIColors.YELLOW).value(f.format_value().value(obj))
 
@@ -937,6 +941,7 @@ class Formatter:
 
     _dispatch_repr = {
         type(None).__repr__: format_none,
+        bool.__repr__: format_float,
         float.__repr__: format_float,
         int.__repr__: format_int,
         str.__repr__: format_str,
