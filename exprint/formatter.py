@@ -870,7 +870,7 @@ def format_str(obj: str, f: Formatter) -> Format:
     return f.format_color(ANSIColors.GREEN).value(f.format_value().value(f'"{obj}"'))
 
 
-def format_bytes(obj: int, f: Formatter) -> Format:
+def format_bytes(obj: bytes, f: Formatter) -> Format:
     return f.format_color(ANSIColors.GREEN).value(f.format_value().value(obj))
 
 
