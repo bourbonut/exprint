@@ -89,8 +89,11 @@ def dispatch_repr(obj_type: type[T], format_func: Callable[[T, Formatter], Forma
 
     See also
     --------
-    dispatch_obj : Format functions for types with `__name__` attribute.
-    dispatch_generic : Format functions for generic objects.
+
+    - [`dispatch_obj`][exprint.exprint.dispatch_obj] : Format functions for
+      types with `__name__` attribute.
+    - [`dispatch_generic`][exprint.exprint.dispatch_generic] : Format functions
+      for generic objects.
     """
     Formatter._dispatch_repr[obj_type.__repr__] = format_func
 
@@ -123,8 +126,11 @@ def dispatch_obj(
 
     See also
     --------
-    dispatch_repr : Format functions for types with `__repr__` method.
-    dispatch_generic : Format functions for generic objects.
+
+    - [`dispatch_repr`][exprint.exprint.dispatch_repr] : Format functions for
+      types with `__repr__` method.
+    - [`dispatch_generic`][exprint.exprint.dispatch_generic] : Format functions
+      for generic objects.
     """
     if isinstance(obj_type, str):
         Formatter._dispatch_objs[obj_type] = format_func
@@ -161,7 +167,10 @@ def dispatch_generic(gen_key: str, format_func: Callable[[Any, Formatter], Forma
 
     See also
     --------
-    dispatch_obj : Format functions for types with `__name__` attribute.
-    dispatch_repr : Format functions for types with `__repr__` method.
+
+    - [`dispatch_obj`][exprint.exprint.dispatch_obj] : Format functions for
+      types with `__name__` attribute.
+    - [`dispatch_repr`][exprint.exprint.dispatch_repr] : Format functions for
+      types with `__repr__` method.
     """
     Formatter._dispatch_generic[gen_key] = format_func
