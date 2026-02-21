@@ -82,6 +82,7 @@ extra_css:
 nav:
   - Home: index.md
   - Guide: guide.md
+  - Default functions: default.md
   - API:
     - api/index.md
     - api/exprint.md
