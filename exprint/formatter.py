@@ -854,7 +854,7 @@ def format_none(obj: None, f: Formatter) -> Format:
     return f.format_value().value(obj)
 
 
-def format_bool(obj: None, f: Formatter) -> Format:
+def format_bool(obj: bool, f: Formatter) -> Format:
     return f.format_color(ANSIColors.YELLOW).value(f.format_value().value(obj))
 
 
