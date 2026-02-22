@@ -1,6 +1,6 @@
 [project]
 name = "exprint"
-version = "0.1.0"
+version = "0.1.1"
 description = "exprint helps you explore data quickly by pretty-printing values with a flexible API"
 readme = "README.md"
 authors = [
